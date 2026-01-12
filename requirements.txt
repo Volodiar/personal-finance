@@ -1,0 +1,7 @@
+# Personal Finance - Streamlit Cloud Deployment
+streamlit>=1.32.0
+pandas>=2.0.0
+plotly>=5.18.0
+gspread>=6.0.0
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0

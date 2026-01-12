@@ -55,6 +55,7 @@ from savings_goal import (
     load_savings_goal, save_savings_goal, get_monthly_target,
     calculate_savings_progress, get_category_variance
 )
+from auth import check_password, logout
 
 
 # ============================================================================
@@ -374,17 +375,27 @@ def init_session_state():
         st.session_state.theme = 'dark'  # Default theme
 
 
-def render_theme_toggle():
-    """Render the theme toggle button in the header."""
+def render_header_controls():
+    """Render theme toggle and logout button in the header."""
     theme = st.session_state.get('theme', 'dark')
-    icon = "🌙" if theme == 'dark' else "☀️"
+    theme_icon = "🌙" if theme == 'dark' else "☀️"
     
-    # Use columns to position toggle in top right
-    cols = st.columns([10, 1])
+    # Use columns to position controls in top right
+    cols = st.columns([9, 1, 1])
+    
     with cols[1]:
-        if st.button(icon, key="theme_toggle", help="Toggle Dark/Light mode"):
+        if st.button(theme_icon, key="theme_toggle", help="Toggle Dark/Light mode"):
             st.session_state.theme = 'light' if theme == 'dark' else 'dark'
             st.rerun()
+    
+    with cols[2]:
+        if st.button("🚪", key="logout_btn", help="Logout"):
+            logout()
+
+
+def render_theme_toggle():
+    """Legacy function - redirects to render_header_controls."""
+    render_header_controls()
 
 
 # ============================================================================
@@ -1918,13 +1929,19 @@ def render_joint_analytics():
 
 def main():
     """Main application entry point."""
-    # Initialize
-    ensure_directories()
-    init_session_state()
+    # Apply styles first (for login page too)
     apply_custom_styles()
     
-    # Render theme toggle in header
-    render_theme_toggle()
+    # Check authentication - show login if not authenticated
+    if not check_password():
+        return
+    
+    # Initialize after auth
+    ensure_directories()
+    init_session_state()
+    
+    # Render theme toggle and logout in header
+    render_header_controls()
     
     # Route to appropriate screen
     current_screen = st.session_state.current_screen
