@@ -1,0 +1,25 @@
+{
+  "masha": {
+    "monthly_budgets": {},
+    "goals": []
+  },
+  "pablo": {
+    "monthly_budgets": {
+      "Housing & Bills": 1700.0,
+      "Groceries": 200.0,
+      "Food & Dining": 200.0
+    },
+    "goals": [
+      {
+        "id": "20260112081639",
+        "name": "Finance Recover ",
+        "target_amount": 4000.0,
+        "current_amount": 0.0,
+        "deadline": null,
+        "description": "",
+        "created": "2026-01-12T08:16:39.314614",
+        "completed": false
+      }
+    ]
+  }
+}
