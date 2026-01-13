@@ -746,7 +746,7 @@ def render_user_home(data_user_id: str):
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.markdown("<h3>📤 Upload Data</h3>", unsafe_allow_html=True)
         st.markdown("<p style='color: rgba(255,255,255,0.7);'>Upload new bank statements</p>", unsafe_allow_html=True)
-        if st.button("📂 Upload CSV", key="upload_btn", use_container_width=True):
+        if st.button("📂 Upload Data", key="upload_btn", use_container_width=True):
             st.session_state.current_screen = "upload"
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
@@ -791,8 +791,9 @@ def render_user_home(data_user_id: str):
 
 def render_upload_screen():
     """Render the upload and validation screen."""
-    user = st.session_state.selected_user
-    user_display = user.capitalize()
+    # Use selected_data_user_name if available (new system), else fallback
+    user = st.session_state.get("selected_data_user_name") or st.session_state.get("selected_user") or "User"
+    user_display = str(user).capitalize()
     
     # Header with back button
     col1, col2, col3 = st.columns([1, 3, 1])
