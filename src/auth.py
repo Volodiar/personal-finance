@@ -158,11 +158,11 @@ def show_oauth_login(config: Dict) -> bool:
             st.write("**Redirect URI:**", config["redirect_uri"])
             st.code(auth_url[:100] + "...", language=None)
         
-        # Login button as a link
+        # Login button as a link - target="_top" breaks out of iframe
         st.markdown(
             f"""
             <div style='text-align: center; margin: 2rem 0;'>
-                <a href="{auth_url}" target="_self" style="
+                <a href="{auth_url}" target="_top" style="
                     display: inline-block;
                     padding: 12px 24px;
                     background: #4285f4;
