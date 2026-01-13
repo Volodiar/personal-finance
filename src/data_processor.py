@@ -261,7 +261,7 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                     
                     # Must start with a date-like pattern to be a transaction
                     # Regex: 2 digits, space, 3 chars, space, 4 digits
-                    import re
+
                     first_word = line[0]['text']
                     if not re.match(r'^\d{2}$', first_word):
                          continue
