@@ -35,7 +35,7 @@ from analytics import (
     create_daily_chart_all, create_monthly_chart, create_annual_chart,
     create_category_breakdown_chart, create_category_trend, create_financial_summary_bar,
     get_daily_summary, get_monthly_summary, get_annual_summary, 
-    get_category_summary, get_category_breakdown
+    get_category_summary, get_category_breakdown, filter_data_by_period
 )
 from budgets import (
     get_user_budgets, set_category_budget, remove_category_budget,
@@ -311,7 +311,56 @@ def apply_custom_styles():
         min-height: 44px; /* Touch-friendly */
     }}
     
-    /* Mobile Responsive */
+    /* Improved grid handling - prevent overflow */
+    .stColumns > div {{
+        min-width: 0;
+    }}
+    
+    /* Desktop large screens */
+    @media (min-width: 1200px) {{
+        .glass-card {{
+            padding: 2.5rem;
+        }}
+        
+        .kpi-value {{
+            font-size: 2.2rem;
+        }}
+    }}
+    
+    /* Tablet (768px - 1024px) */
+    @media (min-width: 768px) and (max-width: 1024px) {{
+        .glass-card {{
+            padding: 1.5rem;
+            margin: 0.75rem 0;
+        }}
+        
+        .kpi-card {{
+            padding: 1.2rem;
+        }}
+        
+        .kpi-value {{
+            font-size: 1.6rem;
+        }}
+        
+        .kpi-label {{
+            font-size: 0.8rem;
+        }}
+        
+        .profile-btn {{
+            padding: 2rem 1.5rem;
+        }}
+        
+        h1 {{
+            font-size: 1.75rem !important;
+        }}
+        
+        .stTabs [data-baseweb="tab"] {{
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }}
+    }}
+    
+    /* Mobile (max-width: 768px) */
     @media (max-width: 768px) {{
         .glass-card {{
             padding: 1rem;
@@ -321,10 +370,16 @@ def apply_custom_styles():
         
         .kpi-card {{
             padding: 1rem;
+            margin-bottom: 0.5rem;
         }}
         
         .kpi-value {{
-            font-size: 1.5rem;
+            font-size: 1.4rem;
+        }}
+        
+        .kpi-label {{
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
         }}
         
         .profile-btn {{
@@ -333,20 +388,53 @@ def apply_custom_styles():
         
         h1 {{
             font-size: 1.5rem !important;
+            margin-bottom: 1rem !important;
         }}
         
+        h3 {{
+            font-size: 1.1rem !important;
+        }}
+        
+        /* Horizontal scrolling tabs on mobile */
         .stTabs [data-baseweb="tab-list"] {{
-            flex-wrap: wrap;
+            overflow-x: auto;
+            flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE/Edge */
+            padding-bottom: 5px;
+        }}
+        
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar {{
+            display: none; /* Chrome/Safari */
         }}
         
         .stTabs [data-baseweb="tab"] {{
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             padding: 0.4rem 0.8rem;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }}
+        
+        /* Stack columns on mobile */
+        [data-testid="stHorizontalBlock"] {{
+            flex-wrap: wrap;
+        }}
+        
+        [data-testid="stHorizontalBlock"] > div {{
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
         }}
     }}
     
+    /* Small Mobile (max-width: 480px) */
     @media (max-width: 480px) {{
         .glass-card {{
+            padding: 0.75rem;
+            border-radius: 12px;
+        }}
+        
+        .kpi-card {{
             padding: 0.75rem;
         }}
         
@@ -355,7 +443,25 @@ def apply_custom_styles():
         }}
         
         .kpi-label {{
+            font-size: 0.7rem;
+        }}
+        
+        h1 {{
+            font-size: 1.25rem !important;
+        }}
+        
+        h3 {{
+            font-size: 1rem !important;
+        }}
+        
+        .stTabs [data-baseweb="tab"] {{
             font-size: 0.75rem;
+            padding: 0.35rem 0.6rem;
+        }}
+        
+        /* Ensure charts don't overflow */
+        .js-plotly-plot {{
+            max-width: 100% !important;
         }}
     }}
     </style>
@@ -1182,12 +1288,39 @@ def render_budget_tab(data: pd.DataFrame, user_display: str):
 def render_dashboard_tab(data: pd.DataFrame, user_display: str):
     """Render dashboard with quick-glance widgets."""
     user = user_display.lower()
-    kpis = calculate_kpis(data)
-    velocity = calculate_spending_velocity(data)
     
-    # Quick Glance Widgets Row 1
+    # Time Period Selector
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-    st.markdown("<h3>⚡ Quick Glance</h3>", unsafe_allow_html=True)
+    col_title, col_selector = st.columns([3, 1])
+    with col_title:
+        st.markdown("<h3>⚡ Quick Glance</h3>", unsafe_allow_html=True)
+    with col_selector:
+        period_options = {
+            "📊 All Time": "all_time",
+            "📅 Last Week": "last_week", 
+            "📆 Last Month": "last_month",
+            "📈 Last Year": "last_year"
+        }
+        selected_period_label = st.selectbox(
+            "Period",
+            list(period_options.keys()),
+            key=f"dashboard_period_{user}",
+            label_visibility="collapsed"
+        )
+        selected_period = period_options[selected_period_label]
+    
+    # Filter data by selected period
+    filtered_data = filter_data_by_period(data, selected_period)
+    
+    # Show message if no data in selected period
+    if filtered_data.empty:
+        st.info(f"No transactions found for {selected_period_label.split(' ', 1)[1]}. Try selecting a different time period.")
+        st.markdown("</div>", unsafe_allow_html=True)
+        return
+    
+    # Calculate KPIs with filtered data
+    kpis = calculate_kpis(filtered_data)
+    velocity = calculate_spending_velocity(filtered_data)
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -1228,7 +1361,7 @@ def render_dashboard_tab(data: pd.DataFrame, user_display: str):
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Budget Alerts Widget
-    alerts = get_budget_alerts(user, data)
+    alerts = get_budget_alerts(user, filtered_data)
     if alerts:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.markdown("<h3>🔔 Budget Alerts</h3>", unsafe_allow_html=True)
@@ -1246,20 +1379,20 @@ def render_dashboard_tab(data: pd.DataFrame, user_display: str):
     
     with col1:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        fig = create_category_pie_chart(data, f"Expenses by Category")
+        fig = create_category_pie_chart(filtered_data, f"Expenses by Category")
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
     
     with col2:
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        fig = create_income_expense_trend(data, f"Income vs Expenses")
+        fig = create_income_expense_trend(filtered_data, f"Income vs Expenses")
         st.plotly_chart(fig, use_container_width=True)
         st.markdown("</div>", unsafe_allow_html=True)
     
     # Category Breakdown Table
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
     st.markdown("<h3>🏷️ Top Spending Categories</h3>", unsafe_allow_html=True)
-    breakdown = get_category_breakdown(data)
+    breakdown = get_category_breakdown(filtered_data)
     if not breakdown.empty:
         breakdown = breakdown.head(5)  # Top 5 only for dashboard
         breakdown['Amount'] = breakdown['Amount'].apply(lambda x: f"€{x:,.2f}")
@@ -1268,7 +1401,7 @@ def render_dashboard_tab(data: pd.DataFrame, user_display: str):
     st.markdown("</div>", unsafe_allow_html=True)
     
     # Transaction Explorer
-    render_transaction_explorer(data, user_display)
+    render_transaction_explorer(filtered_data, user_display)
 
 
 def render_periods_tab(data: pd.DataFrame, user_display: str):

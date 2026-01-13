@@ -18,6 +18,50 @@ from categories import get_category_color, ALL_CATEGORIES
 
 
 # ============================================================================
+# TIME PERIOD FILTERING
+# ============================================================================
+
+def filter_data_by_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
+    """
+    Filter DataFrame by time period.
+    
+    Args:
+        df: DataFrame with 'Date' column
+        period: One of 'all_time', 'last_week', 'last_month', 'last_year'
+    
+    Returns:
+        Filtered DataFrame (copy)
+    """
+    if df.empty or 'Date' not in df.columns:
+        return df.copy()
+    
+    if period == 'all_time':
+        return df.copy()
+    
+    df = df.copy()
+    df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+    
+    # Get current date at midnight for consistent comparison
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Calculate start date based on period
+    if period == 'last_week':
+        start_date = now - timedelta(days=7)
+    elif period == 'last_month':
+        start_date = now - timedelta(days=30)
+    elif period == 'last_year':
+        start_date = now - timedelta(days=365)
+    else:
+        # Default to all time if unknown period
+        return df
+    
+    # Filter by date range
+    filtered = df[df['Date'] >= start_date]
+    
+    return filtered
+
+
+# ============================================================================
 # KPI CALCULATIONS
 # ============================================================================
 
