@@ -82,8 +82,6 @@ def update_learned_mappings(new_mappings: dict):
 def get_user_data_path(user: str) -> Path:
     """Get the data directory path for a user."""
     user_lower = user.lower()
-    if user_lower not in ['masha', 'pablo']:
-        raise ValueError(f"Invalid user: {user}. Must be 'masha' or 'pablo'.")
     return DATA_DIR / user_lower
 
 
