@@ -1049,7 +1049,33 @@ def save_processed_data(edited_df: pd.DataFrame):
     
     # Save with smart merging (duplicate detection and category updates)
     try:
-        filepath, new_count, dup_count, updated_count = add_transactions(user, original_df)
+        if is_cloud_mode():
+            # Cloud Mode (Google Sheets)
+            # Fetch account hash (assuming single account for now or derived from user)
+            # For simplicity, we get the hash for the current user's email if available, 
+            # otherwise allow 'add_transactions_sheets' to handle or use a default.
+            # However, sheets_storage.add_transactions needs (account_hash, data_user_id, df)
+            
+            # We need the account hash. Let's try to get it from the session of logged in user.
+            current_user = get_current_user()
+            if current_user:
+                account_hash = get_account_hash(current_user['email'])
+            else:
+                # Fallback or error? For now let's assume one exists or fail gracefully
+                 st.error("You must be logged in for Cloud Mode.")
+                 return
+
+            # Sheets storage returns a dict {'added': int, 'duplicates': int}
+            result = add_transactions_sheets(account_hash, user, original_df)
+            
+            new_count = result.get('added', 0)
+            dup_count = result.get('duplicates', 0)
+            updated_count = 0 # Sheets logic doesn't track updates yet
+            filepath = "Google Sheets"
+            
+        else:
+            # Local Mode
+            filepath, new_count, dup_count, updated_count = add_transactions(user, original_df)
         
         # Store result for success screen
         st.session_state.save_result = {
