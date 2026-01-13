@@ -1013,7 +1013,8 @@ def render_editable_table():
 
 def save_processed_data(edited_df: pd.DataFrame):
     """Save the processed data with smart merging and update learned mappings."""
-    user = st.session_state.selected_user
+    # Use selected_data_user_name if available (new system), else fallback
+    user = st.session_state.get("selected_data_user_name") or st.session_state.get("selected_user") or "User"
     original_df = st.session_state.processed_data.copy()
     original_categories = st.session_state.original_categories
     
