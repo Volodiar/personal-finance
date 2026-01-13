@@ -1297,9 +1297,9 @@ def render_dashboard_tab(data: pd.DataFrame, user_display: str):
     with col_selector:
         period_options = {
             "📊 All Time": "all_time",
-            "📅 Last Week": "last_week", 
+            "📈 Last Year": "last_year",
             "📆 Last Month": "last_month",
-            "📈 Last Year": "last_year"
+            "📅 Last Week": "last_week", 
         }
         selected_period_label = st.selectbox(
             "Period",
