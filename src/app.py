@@ -55,7 +55,16 @@ from savings_goal import (
     load_savings_goal, save_savings_goal, get_monthly_target,
     calculate_savings_progress, get_category_variance
 )
-from auth import check_password, logout
+from auth import check_password, logout, get_current_user
+from accounts import (
+    get_or_create_account, get_data_users, add_data_user, delete_data_user,
+    update_data_user, get_account_hash
+)
+from sheets_storage import (
+    load_data_user_transactions, save_data_user_transactions,
+    add_transactions as add_transactions_sheets, load_all_data_users_transactions,
+    is_cloud_mode
+)
 
 
 # ============================================================================
@@ -403,61 +412,68 @@ def render_theme_toggle():
 # ============================================================================
 
 def render_home_screen():
-    """Render the home/landing screen with user management."""
+    """Render the home/landing screen with data user management."""
     # App header
-    st.markdown("<h1>💰 Personal Finance</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.7); font-size: 1.2rem; margin-bottom: 2rem;'>Smart Financial Tracking & Insights</p>", unsafe_allow_html=True)
+    user_email = st.session_state.get("user_email", "")
+    user_name = st.session_state.get("user_name", "User")
     
-    users = load_users()
+    st.markdown("<h1>💰 Personal Finance</h1>", unsafe_allow_html=True)
+    if user_email:
+        st.markdown(f"<p style='text-align: center; color: rgba(255,255,255,0.7);'>Welcome, {user_name}!</p>", unsafe_allow_html=True)
+    
+    # Get account's data users (from session state, set in main())
+    data_users = st.session_state.get("account_data_users", [])
+    
+    # Fallback to local users if not in cloud mode
+    if not is_cloud_mode():
+        data_users = [{"id": u["folder"], "name": u["name"], "emoji": u.get("emoji", "👤")} for u in load_users()]
     
     # Main content area
     col1, col2, col3 = st.columns([1, 3, 1])
     
     with col2:
-        # User selection section
+        # Data User selection section
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center;'>👥 Select User</h3>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center;'>👥 Select Profile</h3>", unsafe_allow_html=True)
         
-        if users:
-            # Create columns for user cards
-            num_users = len(users)
-            cols = st.columns(min(num_users + 1, 4))  # Max 4 columns
+        if data_users:
+            num_users = len(data_users)
+            cols = st.columns(min(num_users + 1, 4))
             
-            for i, user in enumerate(users):
+            for i, du in enumerate(data_users):
                 with cols[i % len(cols)]:
-                    # User card button
-                    if st.button(
-                        f"{user['emoji']} {user['name']}", 
-                        key=f"user_{user['folder']}", 
-                        use_container_width=True
-                    ):
-                        st.session_state.selected_user = user['folder']
+                    emoji = du.get('emoji', '👤')
+                    name = du.get('name', du.get('id', 'User'))
+                    data_user_id = du.get('id', name.lower())
+                    
+                    if st.button(f"{emoji} {name}", key=f"du_{data_user_id}", use_container_width=True):
+                        st.session_state.selected_data_user_id = data_user_id
+                        st.session_state.selected_data_user_name = name
                         st.session_state.current_screen = "user_home"
                         st.rerun()
             
-            # Add user button
+            # Add data user button
             with cols[-1] if num_users < 4 else st.columns(4)[-1]:
-                if st.button("➕ Add User", key="add_user_btn", use_container_width=True):
-                    st.session_state.show_add_user = True
+                if st.button("➕ Add Profile", key="add_du_btn", use_container_width=True):
+                    st.session_state.show_add_data_user = True
                     st.rerun()
         else:
-            st.info("No users yet! Create your first user to get started.")
-            if st.button("➕ Create First User", use_container_width=True):
-                st.session_state.show_add_user = True
+            st.info("No profiles yet! Create your first profile to get started.")
+            if st.button("➕ Create First Profile", use_container_width=True):
+                st.session_state.show_add_data_user = True
                 st.rerun()
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Add user modal
-        if st.session_state.get('show_add_user', False):
+        # Add data user modal
+        if st.session_state.get('show_add_data_user', False):
             st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-            st.markdown("<h4>➕ Add New User</h4>", unsafe_allow_html=True)
+            st.markdown("<h4>➕ Add New Profile</h4>", unsafe_allow_html=True)
             
-            new_name = st.text_input("Name", placeholder="Enter user name", key="new_user_name")
+            new_name = st.text_input("Name", placeholder="Enter profile name", key="new_du_name")
             
             st.markdown("<p style='color: rgba(255,255,255,0.7);'>Select an emoji:</p>", unsafe_allow_html=True)
             
-            # Emoji picker grid
             emoji_cols = st.columns(8)
             selected_emoji = st.session_state.get('selected_emoji', '👤')
             
@@ -471,21 +487,34 @@ def render_home_screen():
             
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("✅ Create User", use_container_width=True):
+                if st.button("✅ Create Profile", use_container_width=True):
                     if new_name:
-                        if add_user(new_name, selected_emoji):
-                            st.session_state.show_add_user = False
-                            st.session_state.selected_emoji = '👤'
-                            st.success(f"User '{new_name}' created!")
-                            st.rerun()
+                        if is_cloud_mode() and user_email:
+                            # Add to account in cloud
+                            if add_data_user(user_email, new_name, selected_emoji):
+                                st.session_state.show_add_data_user = False
+                                st.session_state.selected_emoji = '👤'
+                                # Refresh account data
+                                account = get_or_create_account(user_email)
+                                st.session_state.account_data_users = account.get("data_users", [])
+                                st.success(f"Profile '{new_name}' created!")
+                                st.rerun()
+                            else:
+                                st.error("Profile already exists!")
                         else:
-                            st.error("User already exists!")
+                            # Local mode - use old system
+                            if add_user(new_name, selected_emoji):
+                                st.session_state.show_add_data_user = False
+                                st.success(f"Profile '{new_name}' created!")
+                                st.rerun()
+                            else:
+                                st.error("Profile already exists!")
                     else:
                         st.warning("Please enter a name")
             
             with col_b:
                 if st.button("❌ Cancel", use_container_width=True):
-                    st.session_state.show_add_user = False
+                    st.session_state.show_add_data_user = False
                     st.rerun()
             
             st.markdown("</div>", unsafe_allow_html=True)
@@ -495,14 +524,15 @@ def render_home_screen():
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.markdown("<h3 style='text-align: center;'>⚡ Quick Actions</h3>", unsafe_allow_html=True)
         
-        action_cols = st.columns(2 if should_show_joint_view() else 1)
+        show_joint = len(data_users) > 1
+        action_cols = st.columns(2 if show_joint else 1)
         
         with action_cols[0]:
             if st.button("📊 View Analytics Dashboard", use_container_width=True):
                 st.session_state.current_screen = "analytics"
                 st.rerun()
         
-        if should_show_joint_view():
+        if show_joint:
             with action_cols[1]:
                 if st.button("👥 Joint Analytics", use_container_width=True):
                     st.session_state.current_screen = "joint_analytics"
@@ -511,24 +541,41 @@ def render_home_screen():
         st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_user_home(user_folder: str):
-    """Render home screen for a specific user."""
-    users = load_users()
-    user = next((u for u in users if u['folder'] == user_folder), None)
+def render_user_home(data_user_id: str):
+    """Render home screen for a specific data user (profile)."""
+    user_email = st.session_state.get("user_email", "")
+    account_hash = st.session_state.get("account_hash", "")
+    data_users = st.session_state.get("account_data_users", [])
     
-    if not user:
-        st.error("User not found!")
+    # Find the data user
+    data_user = next((du for du in data_users if du.get('id') == data_user_id), None)
+    
+    # Fallback to local user system if not in cloud
+    if not data_user and not is_cloud_mode():
+        users = load_users()
+        local_user = next((u for u in users if u['folder'] == data_user_id), None)
+        if local_user:
+            data_user = {"id": data_user_id, "name": local_user['name'], "emoji": local_user.get('emoji', '👤')}
+    
+    if not data_user:
+        st.error("Profile not found!")
+        if st.button("← Back to Home"):
+            st.session_state.current_screen = "home"
+            st.rerun()
         return
+    
+    user_name = data_user.get('name', data_user_id)
+    user_emoji = data_user.get('emoji', '👤')
     
     # Header with back button
     col1, col2, col3 = st.columns([1, 4, 1])
     with col1:
         if st.button("← Back"):
             st.session_state.current_screen = "home"
-            st.session_state.selected_user = None
+            st.session_state.selected_data_user_id = None
             st.rerun()
     with col2:
-        st.markdown(f"<h1>{user['emoji']} {user['name']}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<h1>{user_emoji} {user_name}</h1>", unsafe_allow_html=True)
     with col3:
         if st.button("⚙️ Settings", key="user_settings"):
             st.session_state.show_user_settings = True
@@ -537,31 +584,41 @@ def render_user_home(user_folder: str):
     # User settings modal
     if st.session_state.get('show_user_settings', False):
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("<h4>⚙️ User Settings</h4>", unsafe_allow_html=True)
+        st.markdown("<h4>⚙️ Profile Settings</h4>", unsafe_allow_html=True)
         
         col_a, col_b = st.columns(2)
         with col_a:
-            new_emoji = st.selectbox("Change Emoji", AVAILABLE_EMOJIS, 
-                                     index=AVAILABLE_EMOJIS.index(user['emoji']) if user['emoji'] in AVAILABLE_EMOJIS else 0)
+            current_emoji_idx = AVAILABLE_EMOJIS.index(user_emoji) if user_emoji in AVAILABLE_EMOJIS else 0
+            new_emoji = st.selectbox("Change Emoji", AVAILABLE_EMOJIS, index=current_emoji_idx)
             if st.button("Update Emoji", use_container_width=True):
-                update_user(user['name'], new_emoji=new_emoji)
+                if is_cloud_mode() and user_email:
+                    update_data_user(user_email, data_user_id, new_emoji=new_emoji)
+                    account = get_or_create_account(user_email)
+                    st.session_state.account_data_users = account.get("data_users", [])
+                else:
+                    update_user(user_name, new_emoji=new_emoji)
                 st.success("Emoji updated!")
                 st.session_state.show_user_settings = False
                 st.rerun()
         
         with col_b:
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("🗑️ Delete User", use_container_width=True):
+            if st.button("🗑️ Delete Profile", use_container_width=True):
                 st.session_state.confirm_delete = True
         
         if st.session_state.get('confirm_delete', False):
-            st.warning(f"⚠️ Are you sure you want to delete '{user['name']}'? This will remove all their data!")
+            st.warning(f"⚠️ Are you sure you want to delete '{user_name}'? This will remove all their data!")
             col_y, col_n = st.columns(2)
             with col_y:
                 if st.button("Yes, Delete", use_container_width=True):
-                    delete_user(user['name'])
+                    if is_cloud_mode() and user_email:
+                        delete_data_user(user_email, data_user_id)
+                        account = get_or_create_account(user_email)
+                        st.session_state.account_data_users = account.get("data_users", [])
+                    else:
+                        delete_user(user_name)
                     st.session_state.current_screen = "home"
-                    st.session_state.selected_user = None
+                    st.session_state.selected_data_user_id = None
                     st.session_state.confirm_delete = False
                     st.session_state.show_user_settings = False
                     st.rerun()
@@ -597,8 +654,12 @@ def render_user_home(user_folder: str):
             st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Quick stats preview
-    data = load_user_data(user_folder)
+    # Quick stats preview - load from appropriate source
+    if is_cloud_mode() and account_hash:
+        data = load_data_user_transactions(account_hash, data_user_id)
+    else:
+        data = load_user_data(data_user_id)
+    
     if not data.empty:
         kpis = calculate_kpis(data)
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
@@ -1936,6 +1997,17 @@ def main():
     if not check_password():
         return
     
+    # Auto-create/get user from OAuth email
+    user_email = st.session_state.get("user_email", "")
+    user_email = st.session_state.get("user_email", "")
+    user_name = st.session_state.get("user_name", "")
+    
+    # Multi-tenant: Get or create account for this email
+    if user_email and is_cloud_mode():
+        account = get_or_create_account(user_email)
+        st.session_state.account_hash = account.get("hash", "")
+        st.session_state.account_data_users = account.get("data_users", [])
+    
     # Initialize after auth
     ensure_directories()
     init_session_state()
@@ -1949,7 +2021,7 @@ def main():
     if current_screen == 'home':
         render_home_screen()
     elif current_screen == 'user_home':
-        render_user_home(st.session_state.selected_user)
+        render_user_home(st.session_state.get("selected_data_user_id", ""))
     elif current_screen == 'upload':
         render_upload_screen()
     elif current_screen == 'analytics':

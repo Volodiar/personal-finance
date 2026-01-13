@@ -171,3 +171,55 @@ def get_user_count() -> int:
 def should_show_joint_view() -> bool:
     """Return True if joint view should be available (2+ users)."""
     return get_user_count() > 1
+
+
+def get_user_by_folder(folder: str) -> Optional[Dict]:
+    """Get user by folder name."""
+    for user in load_users():
+        if user["folder"] == folder:
+            return user
+    return None
+
+
+def get_or_create_user_from_email(email: str, name: str = None) -> Dict:
+    """
+    Get or create a user based on their email.
+    Used for OAuth login to auto-create users.
+    
+    Args:
+        email: User's email address
+        name: User's display name (from OAuth)
+        
+    Returns:
+        User dict with name, folder, emoji
+    """
+    # Convert email to folder name
+    folder = email.split("@")[0].replace(".", "_").replace("-", "_").lower()
+    folder = "".join(c for c in folder if c.isalnum() or c == "_")
+    
+    # Check if user already exists
+    existing = get_user_by_folder(folder)
+    if existing:
+        return existing
+    
+    # Create new user
+    display_name = name or email.split("@")[0].replace(".", " ").title()
+    
+    users = load_users()
+    new_user = {
+        "name": display_name,
+        "folder": folder,
+        "emoji": "👤",
+        "email": email,
+        "created": datetime.now().isoformat()
+    }
+    
+    users.append(new_user)
+    save_users(users)
+    
+    # Create user folder (for local dev)
+    user_folder = DATA_DIR / folder
+    user_folder.mkdir(parents=True, exist_ok=True)
+    
+    return new_user
+

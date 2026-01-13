@@ -1,112 +1,141 @@
 # Streamlit Cloud Deployment Guide
 
-## Quick Setup (15 minutes)
+## Quick Setup (20 minutes)
 
-### Step 1: Create Google Cloud Service Account
+---
+
+## Step 1: Google OAuth Credentials (NEW!)
+
+### Create OAuth Client ID
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable **Google Sheets API** and **Google Drive API**:
-   - Go to "APIs & Services" → "Enable APIs"
-   - Search and enable both APIs
-4. Create Service Account:
-   - Go to "IAM & Admin" → "Service Accounts"
-   - Click "Create Service Account"
-   - Name: `personal-finance-app`
-   - Click "Create and Continue"
-   - Skip the optional steps, click "Done"
-5. Create Key:
-   - Click on the service account you just created
-   - Go to "Keys" tab
-   - Click "Add Key" → "Create new key" → "JSON"
-   - Download the JSON file (keep it safe!)
+2. Select your project (or create one)
+3. Go to **APIs & Services** → **Credentials**
+4. Click **Create Credentials** → **OAuth client ID**
+5. Application type: **Web application**
+6. Name: `Personal Finance App`
+7. Authorized redirect URIs:
+   - For local: `http://localhost:8501`
+   - For production: `https://your-app-name.streamlit.app`
+8. Click **Create**
+9. Copy the **Client ID** and **Client Secret**
 
-### Step 2: Create Google Sheet
+### Configure OAuth Consent Screen
 
-1. Go to [Google Sheets](https://sheets.google.com)
-2. Create a new blank spreadsheet
-3. Name it: `Personal Finance Data`
-4. **Share the sheet** with your service account email:
-   - Click "Share" button
-   - Paste the service account email (from the JSON file, looks like: `xxx@xxx.iam.gserviceaccount.com`)
-   - Give "Editor" access
-5. Copy the spreadsheet URL
+1. Go to **OAuth consent screen**
+2. User type: **External**
+3. Fill in App name, User support email
+4. Add scopes: `email`, `profile`, `openid`
+5. Add test users (your email addresses)
+6. Save
 
-### Step 3: Push Code to GitHub
+---
+
+## Step 2: Create Google Cloud Service Account
+
+*(Same as before - for Sheets storage)*
+
+1. Go to "IAM & Admin" → "Service Accounts"
+2. Click "Create Service Account"
+3. Name: `personal-finance-app`
+4. Create Key → JSON → Download
+
+---
+
+## Step 3: Create Google Sheet
+
+1. Create new spreadsheet: "Personal Finance Data"
+2. Share with service account email (Editor access)
+3. Copy the spreadsheet URL
+
+---
+
+## Step 4: Deploy to Streamlit Cloud
 
 ```bash
-# In your project directory
 git add .
-git commit -m "Add cloud deployment support"
+git commit -m "Add Google OAuth support"
 git push origin main
 ```
 
-### Step 4: Deploy to Streamlit Cloud
-
 1. Go to [share.streamlit.io](https://share.streamlit.io)
-2. Sign in with GitHub
-3. Click "New app"
-4. Select your repository and `src/app.py`
-5. Click "Deploy"
+2. Deploy your repo with `src/app.py`
 
-### Step 5: Configure Secrets
+---
 
-In Streamlit Cloud dashboard:
+## Step 5: Configure Secrets
 
-1. Go to your app → "Settings" → "Secrets"
-2. Add the following (replace with your values):
+In Streamlit Cloud: **Settings** → **Secrets**
 
 ```toml
-# Password hash (generate with command below)
-password_hash = "YOUR_HASH_HERE"
+# Cookie encryption key
+cookie_key = "your-random-secret-key-here-make-it-long-and-random"
+
+# Google OAuth
+[google_oauth]
+client_id = "123456789.apps.googleusercontent.com"
+client_secret = "GOCSPX-your-secret"
+redirect_uri = "https://your-app-name.streamlit.app"
+
+# Authorized for joint view
+[authorized_users]
+joint_view = ["pablo@gmail.com", "masha@gmail.com"]
+
+# Fallback password (optional)
+password_hash = "your-hash-here"
 
 # Google Sheet URL
 spreadsheet_url = "https://docs.google.com/spreadsheets/d/YOUR_ID/edit"
 
-# Paste your entire service account JSON here:
+# Service account (paste entire JSON content)
 [gcp_service_account]
 type = "service_account"
-project_id = "your-project"
-private_key_id = "abc123"
-private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-client_email = "personal-finance@your-project.iam.gserviceaccount.com"
-client_id = "123456789"
-auth_uri = "https://accounts.google.com/o/oauth2/auth"
-token_uri = "https://oauth2.googleapis.com/token"
+project_id = "..."
+# ... rest of JSON fields
 ```
 
-### Generate Password Hash
+---
 
-Run this command to generate your password hash:
+## How It Works
 
+### User Flow
+```
+1. User opens app → sees "Sign in with Google" button
+2. User clicks → Google OAuth popup
+3. User logs in → app gets email + name
+4. App creates user folder: pablo_parreno (from email)
+5. User sees ONLY their data
+6. Cookie saved → no re-login for 30 days
+```
+
+### Data Isolation
+- Each user's data in separate worksheet: `{user}_transactions`
+- User can only access their own worksheet
+- Joint view only for authorized emails
+
+---
+
+## Local Testing
+
+### Without OAuth (password mode)
 ```bash
-python3 -c "import hashlib; print(hashlib.sha256(b'YOUR_PASSWORD').hexdigest())"
+./run.sh
+# Use password: finance123
 ```
 
-Replace `YOUR_PASSWORD` with your desired password.
+### With OAuth
+Create `.streamlit/secrets.toml` with your credentials, then:
+```bash
+./run.sh
+```
 
 ---
 
-## Testing Locally
+## Troubleshooting
 
-For local development without Google Sheets:
-
-1. The app will use local CSV storage
-2. Default password: `finance123`
-
-To test with Google Sheets locally:
-
-1. Create `.streamlit/secrets.toml` (copy from `.streamlit/secrets.toml.template`)
-2. Fill in your credentials
-3. Run: `streamlit run src/app.py`
-
----
-
-## Access Your App
-
-After deployment, your app will be available at:
-```
-https://your-app-name.streamlit.app
-```
-
-Access from any device (phone, tablet, computer)!
+| Issue | Solution |
+|-------|----------|
+| OAuth redirect error | Check redirect_uri matches exactly |
+| "Access blocked" | Add yourself as test user in OAuth consent |
+| Cookie not saving | Check cookie_key is set |
+| Can't see data | Check spreadsheet sharing with service account |
