@@ -267,14 +267,8 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                         text = w['text']
                         
                         if cx < x_income:
-                            # Date or Description
-                            # Heuristic: Date is usually the first few words on the left
-                            # But strict X distinct is better if possible.
-                            # Trade Republic: Date is leftmost column.
-                            if cx < 50: # Assuming Date is very left
-                                date_parts.append(text)
-                            else:
-                                concept_parts.append(text)
+                            # Date + Description area
+                            concept_parts.append(text)
                         
                         elif cx >= x_income and cx < x_expense:
                             if re.search(r'\d', text): # Contains number
@@ -284,15 +278,30 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                             if re.search(r'\d', text):
                                 expense_val = text
                                 
-                    # Reconstruct
-                    date_str = " ".join(date_parts)
-                    concept_str = " ".join(concept_parts)
+                    # Attempt to extract date from the beginning of the concept parts
+                    full_text = " ".join(concept_parts)
+                    date_str = ""
+                    concept_str = full_text
+                    
+                    # Regex for "DD MMM YYYY" (e.g., "01 dic 2025")
+                    # Spanish months are 3 chars
+                    date_match = re.match(r'^(\d{2}\s+[a-zA-Z]{3}\s+\d{4})\s+(.*)', full_text)
+                    
+                    if date_match:
+                        date_str = date_match.group(1)
+                        concept_str = date_match.group(2)
+                    else:
+                        # Fallback: Maybe just "DD MMM" or other formats?
+                        # For now, if we match the start, we take it.
+                        match_simple = re.match(r'^(\d{2}\s+[a-zA-Z]{3})\s+(.*)', full_text) # Missing year?
+                        if match_simple:
+                           # This might be risky if year is on next line or missing
+                           pass
                     
                     # Basic validation: needs date
-                    if not re.search(r'\d{2} [a-zA-Z]{3} \d{4}', date_str):
-                        # Maybe extraction split "01" "dic" "2025" into separate words
-                         if not (len(date_parts) >= 3 and re.match(r'\d{2}', date_parts[0])):
-                             continue
+                    if not date_str:
+                         st.write(f"DEBUG: Skipping line (No Date): {full_text}")
+                         continue
 
                     # Clean amount strings
                     def clean_amt(s):
