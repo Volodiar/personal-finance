@@ -51,6 +51,7 @@ def get_spreadsheet():
         st.error("Could not create gspread client!")
         return None
     try:
+        url = st.secrets.get("spreadsheet_url", "")
         if url:
             spreadsheet = client.open_by_url(url)
             return spreadsheet

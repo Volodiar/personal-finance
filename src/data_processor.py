@@ -147,84 +147,164 @@ def find_header_row(content: str, delimiter: str = ';') -> Tuple[int, list]:
     return -1, []
 
 
+
 def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
     """
-    Parse a Trade Republic style PDF bank statement.
+    Parse a Trade Republic style PDF bank statement using text layout analysis.
     
-    Extracts transaction table processing:
-    - FECHA (Date)
-    - DESCRIPCIÓN (Description -> Concepto)
-    - ENTRADA DE DINERO (Income)
-    - SALIDA DE DINERO (Expense)
-    
-    Args:
-        file: PDF file path or object
-        
-    Returns:
-        DataFrame with standardized columns
+    Uses extracts_words to determine column positions dynamically based on headers.
     """
     all_rows = []
     
     try:
-        # Open PDF (handle both path string and file object)
         with pdfplumber.open(file) as pdf:
             st.write(f"DEBUG: Processing PDF with {len(pdf.pages)} pages")
+            
             for page_num, page in enumerate(pdf.pages):
-                # Extract tables using default settings which usually work well for grid-like tables
-                tables = page.extract_tables()
-                st.write(f"DEBUG: Page {page_num+1} - Found {len(tables)} tables")
+                width = page.width
+                words = page.extract_words(x_tolerance=3, y_tolerance=3, keep_blank_chars=False)
                 
-                for table_idx, table in enumerate(tables):
-                    if not table:
+                # 1. Detect Header Positions
+                header_y = None
+                col_splits = {} # 'entrada_start', 'salida_start', 'balance_start'
+                
+                # Search for key headers
+                found_headers = {}
+                for w in words:
+                    text = w['text'].upper()
+                    if 'ENTRADA' in text:
+                        found_headers['income'] = w
+                    elif 'SALIDA' in text:
+                        found_headers['expense'] = w
+                    elif 'BALANCE' in text or 'SALDO' in text:
+                        # Trade Republic uses "BALANCE" in the table
+                        found_headers['balance'] = w
+                    elif 'FECHA' in text:
+                        found_headers['date'] = w
+                
+                if 'income' in found_headers and 'expense' in found_headers:
+                    # Define column boundaries
+                    # Income column is roughly from Income Header Start to Expense Header Start
+                    # Expense column is roughly from Expense Header Start to Balance Header Start
+                    
+                    header_y = found_headers['income']['top']
+                    
+                    # Columns ranges (x0)
+                    x_income = found_headers['income']['x0'] - 20 # buffer
+                    x_expense = found_headers['expense']['x0'] - 20
+                    x_balance = found_headers['balance']['x0'] - 20
+                    
+                    st.write(f"DEBUG: Page {page_num+1} Headers found at Y={header_y:.2f}. "
+                             f"X-Coords: Income={x_income:.2f}, Expense={x_expense:.2f}, Balance={x_balance:.2f}")
+
+                else:
+                    st.warning(f"DEBUG: Page {page_num+1} - Could not find headers (ENTRADA/SALIDA). Skipping page.")
+                    continue
+
+                # 2. Group words by line (using top coordinate)
+                # Sort by top first
+                words_sorted = sorted(words, key=lambda w: w['top'])
+                
+                lines = []
+                current_line = []
+                current_top = -1
+                
+                for w in words_sorted:
+                    # Skip headers and above
+                    if w['top'] <= header_y + 10:
                         continue
                         
-                    # Find header row
-                    header_idx = -1
-                    headers = []
+                    if current_top == -1:
+                        current_top = w['top']
+                        current_line.append(w)
+                    else:
+                        if abs(w['top'] - current_top) < 5: # Same line tolerance
+                            current_line.append(w)
+                        else:
+                            lines.append(current_line)
+                            current_line = [w]
+                            current_top = w['top']
+                if current_line:
+                    lines.append(current_line)
+                
+                # 3. Process Lines
+                st.write(f"DEBUG: Page {page_num+1} - Processing {len(lines)} detected lines")
+                
+                for line in lines:
+                    # Sort words in line by x0
+                    line = sorted(line, key=lambda w: w['x0'])
+                    line_text = " ".join([w['text'] for w in line])
                     
-                    st.write(f"DEBUG: Table {table_idx} first 5 rows:")
-                    for i, row in enumerate(table[:5]):
-                        # Filter None values and convert to string
-                        row_text = [str(cell).strip().upper() for cell in row if cell is not None]
-                        st.write(f"Row {i}: {row_text}")
+                    # Must start with a date-like pattern to be a transaction
+                    # Regex: 2 digits, space, 3 chars, space, 4 digits
+                    import re
+                    first_word = line[0]['text']
+                    if not re.match(r'^\d{2}$', first_word):
+                         continue
+                         
+                    # Attempt to identify components based on X coordinates
+                    date_parts = []
+                    concept_parts = []
+                    income_val = None
+                    expense_val = None
+                    
+                    for w in line:
+                        cx = w['x0']
+                        text = w['text']
                         
-                        # Check for key columns
-                        # Relaxed check: Just FECHA and DESCRIPTION/DESCRIPCIÓN
-                        if 'FECHA' in row_text and any('DESC' in col for col in row_text):
-                            header_idx = i
-                            headers = row_text
-                            st.write(f"DEBUG: FOUND HEADERS at row {i}: {headers}")
-                            break
-                    
-                    if header_idx != -1:
-                        # Process data rows
-                        for row in table[header_idx + 1:]:
-                            # Skip empty rows
-                            if not any(row):
-                                continue
+                        if cx < x_income:
+                            # Date or Description
+                            # Heuristic: Date is usually the first few words on the left
+                            # But strict X distinct is better if possible.
+                            # Trade Republic: Date is leftmost column.
+                            if cx < 50: # Assuming Date is very left
+                                date_parts.append(text)
+                            else:
+                                concept_parts.append(text)
+                        
+                        elif cx >= x_income and cx < x_expense:
+                            if re.search(r'\d', text): # Contains number
+                                income_val = text
+                        
+                        elif cx >= x_expense and cx < x_balance:
+                            if re.search(r'\d', text):
+                                expense_val = text
                                 
-                            row_data = {}
-                            # Map columns based on position
-                            for col_idx, cell in enumerate(row):
-                                if col_idx < len(headers):
-                                    header = headers[col_idx]
-                                    val = str(cell).strip() if cell else ""
-                                    
-                                    if header == 'FECHA':
-                                        row_data['Fecha'] = val
-                                    elif header in ['DESCRIPCIÓN', 'DESCRIPTION']:
-                                        row_data['Concepto'] = val
-                                    elif 'ENTRADA' in header:
-                                        row_data['Income'] = val
-                                    elif 'SALIDA' in header:
-                                        row_data['Expense'] = val
-                            
-                            # Only add if we have basic data
-                            if 'Fecha' in row_data and 'Concepto' in row_data:
-                                all_rows.append(row_data)
+                    # Reconstruct
+                    date_str = " ".join(date_parts)
+                    concept_str = " ".join(concept_parts)
+                    
+                    # Basic validation: needs date
+                    if not re.search(r'\d{2} [a-zA-Z]{3} \d{4}', date_str):
+                        # Maybe extraction split "01" "dic" "2025" into separate words
+                         if not (len(date_parts) >= 3 and re.match(r'\d{2}', date_parts[0])):
+                             continue
+
+                    # Clean amount strings
+                    def clean_amt(s):
+                        if not s: return 0.0
+                        return preprocess_amount(s)
+
+                    amount = 0.0
+                    if income_val:
+                        amount = clean_amt(income_val)
+                    elif expense_val:
+                        amount = -clean_amt(expense_val) # Expenses are negative in our system
+                    
+                    if amount != 0:
+                        all_rows.append({
+                            'Fecha': date_str,
+                            'Concepto': concept_str,
+                            'Importe': amount,
+                            'Income': income_val, # Keep raw for debug if needed
+                            'Expense': expense_val
+                        })
+                        st.write(f"DEBUG: Extracted -> Date: {date_str} | Concept: {concept_str} | Amount: {amount}")
 
     except Exception as e:
-        raise ValueError(f"Error parsing PDF: {str(e)}")
+        import traceback
+        st.error(f"Error parsing PDF: {str(e)}")
+        st.code(traceback.format_exc())
         
     if not all_rows:
         return pd.DataFrame()
@@ -232,36 +312,31 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
     # Convert to DataFrame
     df = pd.DataFrame(all_rows)
     
-    # Calculate Importe (Amount) from Income/Expense
-    def calculate_amount(row):
-        income = preprocess_amount(row.get('Income', '0'))
-        expense = preprocess_amount(row.get('Expense', '0'))
-        
-        if income > 0:
-            return income
-        elif expense > 0:
-            # Expense column is usually positive number representing outflow
-            return -expense
-        else:
-            return 0.0
-            
-    df['Importe'] = df.apply(calculate_amount, axis=1)
-    
     # Clean up Date (Trade Republic format like "01 dic 2025")
     # We might need to handle Spanish month names
     spanish_months = {
         'ene': '01', 'feb': '02', 'mar': '03', 'abr': '04', 'may': '05', 'jun': '06',
-        'jul': '07', 'ago': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dic': '12'
+        'jul': '07', 'ago': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dic': '12',
+        'jan': '01', 'dec': '12', 'apr': '04', 'aug': '08' # English fallbacks just in case
     }
     
     def parse_tr_date(date_str):
         if not date_str:
             return None
-            
+        
+        # Remove any leading/trailing junk
+        date_str = date_str.strip()
+        
         parts = date_str.split()
-        if len(parts) == 3:
-            day, month_str, year = parts
-            month = spanish_months.get(month_str.lower()[:3], '01')
+        if len(parts) >= 3:
+            day = parts[0]
+            month_str = parts[1].lower()
+            year = parts[2]
+            
+            # Remove dots if any (sept.)
+            month_str = month_str.replace('.', '')
+            
+            month = spanish_months.get(month_str[:3], '01')
             return f"{day}/{month}/{year}"
         return date_str
 
