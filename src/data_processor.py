@@ -10,6 +10,7 @@ import re
 from datetime import datetime
 from typing import Union, Optional, Tuple
 from io import BytesIO, StringIO
+import pdfplumber
 
 from categories import categorize_concept
 
@@ -145,6 +146,124 @@ def find_header_row(content: str, delimiter: str = ';') -> Tuple[int, list]:
     return -1, []
 
 
+def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
+    """
+    Parse a Trade Republic style PDF bank statement.
+    
+    Extracts transaction table processing:
+    - FECHA (Date)
+    - DESCRIPCIÓN (Description -> Concepto)
+    - ENTRADA DE DINERO (Income)
+    - SALIDA DE DINERO (Expense)
+    
+    Args:
+        file: PDF file path or object
+        
+    Returns:
+        DataFrame with standardized columns
+    """
+    all_rows = []
+    
+    try:
+        # Open PDF (handle both path string and file object)
+        with pdfplumber.open(file) as pdf:
+            for page in pdf.pages:
+                # Extract tables using default settings which usually work well for grid-like tables
+                tables = page.extract_tables()
+                
+                for table in tables:
+                    if not table:
+                        continue
+                        
+                    # Find header row
+                    header_idx = -1
+                    headers = []
+                    
+                    for i, row in enumerate(table):
+                        # Filter None values and convert to string
+                        row_text = [str(cell).strip().upper() for cell in row if cell is not None]
+                        
+                        # Check for key columns
+                        if 'FECHA' in row_text and ('DESCRIPCIÓN' in row_text or 'DESCRIPTION' in row_text):
+                            header_idx = i
+                            headers = row_text
+                            break
+                    
+                    if header_idx != -1:
+                        # Process data rows
+                        for row in table[header_idx + 1:]:
+                            # Skip empty rows
+                            if not any(row):
+                                continue
+                                
+                            row_data = {}
+                            # Map columns based on position
+                            for col_idx, cell in enumerate(row):
+                                if col_idx < len(headers):
+                                    header = headers[col_idx]
+                                    val = str(cell).strip() if cell else ""
+                                    
+                                    if header == 'FECHA':
+                                        row_data['Fecha'] = val
+                                    elif header in ['DESCRIPCIÓN', 'DESCRIPTION']:
+                                        row_data['Concepto'] = val
+                                    elif 'ENTRADA' in header:
+                                        row_data['Income'] = val
+                                    elif 'SALIDA' in header:
+                                        row_data['Expense'] = val
+                            
+                            # Only add if we have basic data
+                            if 'Fecha' in row_data and 'Concepto' in row_data:
+                                all_rows.append(row_data)
+
+    except Exception as e:
+        raise ValueError(f"Error parsing PDF: {str(e)}")
+        
+    if not all_rows:
+        return pd.DataFrame()
+        
+    # Convert to DataFrame
+    df = pd.DataFrame(all_rows)
+    
+    # Calculate Importe (Amount) from Income/Expense
+    def calculate_amount(row):
+        income = preprocess_amount(row.get('Income', '0'))
+        expense = preprocess_amount(row.get('Expense', '0'))
+        
+        if income > 0:
+            return income
+        elif expense > 0:
+            # Expense column is usually positive number representing outflow
+            return -expense
+        else:
+            return 0.0
+            
+    df['Importe'] = df.apply(calculate_amount, axis=1)
+    
+    # Clean up Date (Trade Republic format like "01 dic 2025")
+    # We might need to handle Spanish month names
+    spanish_months = {
+        'ene': '01', 'feb': '02', 'mar': '03', 'abr': '04', 'may': '05', 'jun': '06',
+        'jul': '07', 'ago': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dic': '12'
+    }
+    
+    def parse_tr_date(date_str):
+        if not date_str:
+            return None
+            
+        parts = date_str.split()
+        if len(parts) == 3:
+            day, month_str, year = parts
+            month = spanish_months.get(month_str.lower()[:3], '01')
+            return f"{day}/{month}/{year}"
+        return date_str
+
+    if 'Fecha' in df.columns:
+        df['Fecha'] = df['Fecha'].apply(parse_tr_date)
+        
+    return df
+
+
 def parse_bank_file(file: Union[BytesIO, str]) -> pd.DataFrame:
     """
     Parse a bank statement file (CSV or Excel) with dynamic header detection.
@@ -166,7 +285,9 @@ def parse_bank_file(file: Union[BytesIO, str]) -> pd.DataFrame:
         filename = file.lower()
     
     try:
-        if filename.endswith('.xlsx') or filename.endswith('.xls'):
+        if filename.endswith('.pdf'):
+            df = parse_pdf_file(file)
+        elif filename.endswith('.xlsx') or filename.endswith('.xls'):
             # For Excel, try to find header row
             df = pd.read_excel(file, header=None)
             # Convert to CSV-like format to use same header detection logic

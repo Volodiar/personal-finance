@@ -814,9 +814,9 @@ def render_upload_screen():
     st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
     
     uploaded_file = st.file_uploader(
-        "Upload your bank statement (CSV or Excel)",
-        type=['csv', 'xlsx', 'xls'],
-        help="Expected columns: Concepto, Tarjeta, Fecha, Importe (semicolon-delimited). Date range can be any period."
+        "Upload your bank statement (CSV, Excel, or PDF)",
+        type=['csv', 'xlsx', 'xls', 'pdf'],
+        help="Supported formats: CSV, Excel, PDF (Trade Republic style)."
     )
     
     if uploaded_file is not None:
