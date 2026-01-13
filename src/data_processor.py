@@ -160,13 +160,15 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
         with pdfplumber.open(file) as pdf:
             st.write(f"DEBUG: Processing PDF with {len(pdf.pages)} pages")
             
+            # Store coordinates from first page to use on subsequent pages
+            last_header_coords = None
+            
             for page_num, page in enumerate(pdf.pages):
                 width = page.width
                 words = page.extract_words(x_tolerance=3, y_tolerance=3, keep_blank_chars=False)
                 
                 # 1. Detect Header Positions
-                header_y = None
-                col_splits = {} # 'entrada_start', 'salida_start', 'balance_start'
+                header_y = -1
                 
                 # Search for key headers
                 found_headers = {}
@@ -184,21 +186,33 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                 
                 if 'income' in found_headers and 'expense' in found_headers:
                     # Define column boundaries
-                    # Income column is roughly from Income Header Start to Expense Header Start
-                    # Expense column is roughly from Expense Header Start to Balance Header Start
-                    
                     header_y = found_headers['income']['top']
                     
                     # Columns ranges (x0)
                     x_income = found_headers['income']['x0'] - 20 # buffer
                     x_expense = found_headers['expense']['x0'] - 20
-                    x_balance = found_headers['balance']['x0'] - 20
+                    # Handle missing balance header gracefully if needed, though usually present
+                    x_balance = found_headers['balance']['x0'] - 20 if 'balance' in found_headers else width
+                    
+                    last_header_coords = {
+                        'x_income': x_income,
+                        'x_expense': x_expense,
+                        'x_balance': x_balance
+                    }
                     
                     st.write(f"DEBUG: Page {page_num+1} Headers found at Y={header_y:.2f}. "
                              f"X-Coords: Income={x_income:.2f}, Expense={x_expense:.2f}, Balance={x_balance:.2f}")
 
+                elif last_header_coords:
+                    # Use coordinates from previous page
+                    x_income = last_header_coords['x_income']
+                    x_expense = last_header_coords['x_expense']
+                    x_balance = last_header_coords['x_balance']
+                    st.write(f"DEBUG: Page {page_num+1} using inherited headers. X-Coords: Income={x_income:.2f}")
+                    # Assume no header processing needed, start near top
+                    header_y = 50 
                 else:
-                    st.warning(f"DEBUG: Page {page_num+1} - Could not find headers (ENTRADA/SALIDA). Skipping page.")
+                    st.warning(f"DEBUG: Page {page_num+1} - Could not find headers (ENTRADA/SALIDA) and no previous headers. Skipping page.")
                     continue
 
                 # 2. Group words by line (using top coordinate)
