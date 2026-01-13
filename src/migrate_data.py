@@ -132,8 +132,11 @@ def main():
             # Add data user to account
             add_data_user(email, config['name'], config['emoji'])
             
-            # Get data
-            df = local_data[folder_name]['df']
+            # Get data - make a copy!
+            df = local_data[folder_name]['df'].copy()
+            
+            # Debug: show original columns
+            st.write(f"Original columns: {list(df.columns)}")
             
             # Normalize columns
             column_mapping = {
@@ -141,6 +144,9 @@ def main():
                 'concepto': 'Concept',
             }
             df = df.rename(columns=column_mapping)
+            
+            # Debug: show renamed columns
+            st.write(f"After rename: {list(df.columns)}")
             
             # Ensure required columns
             if 'Date' not in df.columns:
@@ -154,6 +160,13 @@ def main():
                     if 'amount' in col.lower() or 'importe' in col.lower():
                         df['Amount'] = df[col]
                         break
+            
+            if 'Category' not in df.columns:
+                df['Category'] = ''
+            
+            # Debug: show final columns and sample
+            st.write(f"Final columns: {list(df.columns)}")
+            st.write(f"Sample row: {df[['Date', 'Concept', 'Amount', 'Category']].head(1).to_dict()}")
             
             # Save to sheets
             success = save_data_user_transactions(account['hash'], config['id'], df)

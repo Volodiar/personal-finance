@@ -28,14 +28,19 @@ SCOPES = [
 def get_gspread_client():
     """Get authenticated gspread client."""
     if not GSPREAD_AVAILABLE:
+        st.error("gspread not installed!")
         return None
     try:
         creds_dict = st.secrets.get("gcp_service_account", None)
         if not creds_dict:
+            st.error("No gcp_service_account in secrets!")
             return None
         creds = Credentials.from_service_account_info(dict(creds_dict), scopes=SCOPES)
         return gspread.authorize(creds)
-    except Exception:
+    except Exception as e:
+        st.error(f"Could not create gspread client: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 
@@ -43,13 +48,22 @@ def get_spreadsheet():
     """Get the main spreadsheet."""
     client = get_gspread_client()
     if not client:
+        st.error("Could not create gspread client!")
         return None
     try:
         url = st.secrets.get("spreadsheet_url", "")
+        st.write(f"Spreadsheet URL: {url[:50]}...")
         if url:
-            return client.open_by_url(url)
-        return client.open("Personal Finance Data")
-    except Exception:
+            spreadsheet = client.open_by_url(url)
+            st.write(f"Opened spreadsheet: {spreadsheet.title}")
+            return spreadsheet
+        else:
+            st.warning("No spreadsheet_url in secrets, trying by name...")
+            return client.open("Personal Finance Data")
+    except Exception as e:
+        st.error(f"Could not open spreadsheet: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return None
 
 
@@ -107,22 +121,18 @@ def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.Data
 def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.DataFrame) -> bool:
     """
     Save transactions for a data user (overwrites existing).
-    
-    Args:
-        account_hash: The account's unique hash
-        data_user_id: The data user's ID
-        df: DataFrame with transactions
-        
-    Returns:
-        True if successful
     """
     spreadsheet = get_spreadsheet()
     if not spreadsheet:
+        st.error("Could not get spreadsheet!")
         return False
     
     try:
         worksheet_name = get_worksheet_name(account_hash, data_user_id)
         headers = ['Date', 'Concept', 'Amount', 'Category']
+        
+        st.write(f"Saving to worksheet: {worksheet_name}")
+        st.write(f"DataFrame has {len(df)} rows")
         
         ws = ensure_worksheet(spreadsheet, worksheet_name, headers)
         ws.clear()
@@ -134,14 +144,20 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
         # Ensure we have all columns
         for col in headers:
             if col not in df_copy.columns:
+                st.warning(f"Missing column: {col}, adding empty")
                 df_copy[col] = ''
         
         data = [headers] + df_copy[headers].fillna('').values.tolist()
+        st.write(f"Uploading {len(data)} rows (including header)")
+        
         ws.update('A1', data)
         
+        st.write(f"Upload complete!")
         return True
     except Exception as e:
         st.error(f"Error saving data: {e}")
+        import traceback
+        st.code(traceback.format_exc())
         return False
 
 
