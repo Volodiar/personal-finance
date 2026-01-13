@@ -7,6 +7,9 @@ to isolate their data.
 """
 
 import streamlit as st
+import json
+import tempfile
+import os
 from typing import Optional, Dict, Tuple
 
 # Try to import Google OAuth library
@@ -38,50 +41,42 @@ def email_to_user_folder(email: str) -> str:
     if not email:
         return "anonymous"
     
-    # Take part before @ and clean it
     username = email.split("@")[0]
-    # Replace dots and special chars with underscore
     safe_name = username.replace(".", "_").replace("-", "_").lower()
-    # Remove any remaining special characters
     safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
     
     return safe_name or "user"
 
 
-def check_google_auth() -> Tuple[bool, Optional[str], Optional[str]]:
+def create_credentials_file() -> Optional[str]:
     """
-    Check if user is authenticated via Google OAuth.
-    
-    Returns:
-        Tuple of (is_authenticated, email, name)
+    Create a temporary credentials file from secrets.
+    Returns the path to the file.
     """
-    if not GOOGLE_AUTH_AVAILABLE:
-        return False, None, None
-    
-    config = get_oauth_config()
-    if not config.get("client_id"):
-        return False, None, None
-    
     try:
-        authenticator = Authenticate(
-            secret_credentials_file=None,
-            cookie_name="personal_finance_auth",
-            cookie_key=st.secrets.get("cookie_key", "personal_finance_secret_key"),
-            redirect_uri=config["redirect_uri"],
-            cookie_expiry_days=30,  # Remember login for 30 days
-        )
+        config = get_oauth_config()
+        if not config.get("client_id"):
+            return None
         
-        authenticator.check_authentification()
+        credentials = {
+            "web": {
+                "client_id": config["client_id"],
+                "client_secret": config["client_secret"],
+                "redirect_uris": [config["redirect_uri"]],
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        }
         
-        if st.session_state.get("connected", False):
-            email = st.session_state.get("user_info", {}).get("email", "")
-            name = st.session_state.get("user_info", {}).get("name", "User")
-            return True, email, name
+        # Create temp file
+        fd, path = tempfile.mkstemp(suffix=".json", prefix="oauth_")
+        with os.fdopen(fd, 'w') as f:
+            json.dump(credentials, f)
         
-        return False, None, None
+        return path
     except Exception as e:
-        st.warning(f"OAuth error: {e}")
-        return False, None, None
+        st.error(f"Could not create credentials file: {e}")
+        return None
 
 
 def render_google_login() -> bool:
@@ -95,15 +90,21 @@ def render_google_login() -> bool:
     
     # Check if OAuth is configured
     if not GOOGLE_AUTH_AVAILABLE or not config.get("client_id"):
-        # Fall back to password auth
         return check_password_fallback()
     
     try:
+        # Create credentials file
+        creds_path = create_credentials_file()
+        if not creds_path:
+            return check_password_fallback()
+        
+        cookie_key = st.secrets.get("cookie_key", "personal_finance_secret_key")
+        
         authenticator = Authenticate(
-            secret_credentials_file=None,
-            cookie_name="personal_finance_auth",
-            cookie_key=st.secrets.get("cookie_key", "personal_finance_secret_key"),
+            secret_credentials_path=creds_path,
             redirect_uri=config["redirect_uri"],
+            cookie_name="personal_finance_auth",
+            cookie_key=cookie_key,
             cookie_expiry_days=30,
         )
         
@@ -115,31 +116,27 @@ def render_google_login() -> bool:
             email = st.session_state.get("user_info", {}).get("email", "")
             name = st.session_state.get("user_info", {}).get("name", "User")
             
-            # Set user folder in session
+            # Set user info in session
             st.session_state.user_email = email
             st.session_state.user_name = name
             st.session_state.user_folder = email_to_user_folder(email)
             
+            # Clean up temp file
+            try:
+                os.unlink(creds_path)
+            except:
+                pass
+            
             return True
         
         # Show login screen
-        st.markdown("""
-        <style>
-        .login-container {
-            max-width: 450px;
-            margin: 80px auto;
-            text-align: center;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
             st.markdown("<h1 style='text-align: center;'>💰 Personal Finance</h1>", unsafe_allow_html=True)
             st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.7); margin-bottom: 2rem;'>Smart Financial Tracking & Insights</p>", unsafe_allow_html=True)
             
-            st.markdown("<div class='glass-card' style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
+            st.markdown("<div style='padding: 2rem; text-align: center;'>", unsafe_allow_html=True)
             st.markdown("<h3>Welcome!</h3>", unsafe_allow_html=True)
             st.markdown("<p style='color: rgba(255,255,255,0.7);'>Sign in with your Google account to access your financial data securely.</p>", unsafe_allow_html=True)
             
@@ -147,8 +144,13 @@ def render_google_login() -> bool:
             authenticator.login()
             
             st.markdown("</div>", unsafe_allow_html=True)
-            
             st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 2rem;'>Your data is private and only accessible to you.</p>", unsafe_allow_html=True)
+        
+        # Clean up temp file
+        try:
+            os.unlink(creds_path)
+        except:
+            pass
         
         return False
         
@@ -217,10 +219,10 @@ def check_password() -> bool:
 
 def logout():
     """Log out the current user."""
-    # Clear all auth-related session state
     keys_to_clear = [
         "connected", "user_info", "authenticated",
-        "user_email", "user_name", "user_folder"
+        "user_email", "user_name", "user_folder",
+        "account_hash", "account_data_users"
     ]
     for key in keys_to_clear:
         if key in st.session_state:
@@ -236,19 +238,3 @@ def get_current_user() -> Dict:
         "name": st.session_state.get("user_name", "User"),
         "folder": st.session_state.get("user_folder", "default"),
     }
-
-
-def is_user_authorized_for_joint_view(email: str) -> bool:
-    """
-    Check if user is authorized to see joint view (all users' data).
-    
-    Configure authorized emails in Streamlit secrets:
-    [authorized_users]
-    joint_view = ["pablo@gmail.com", "masha@gmail.com"]
-    """
-    try:
-        authorized = st.secrets.get("authorized_users", {}).get("joint_view", [])
-        return email in authorized
-    except Exception:
-        # By default, no joint view for OAuth users
-        return False
