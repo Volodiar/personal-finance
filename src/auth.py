@@ -154,46 +154,24 @@ def show_oauth_login(config: Dict) -> bool:
         # Generate auth URL
         auth_url = get_authorization_url(config)
         
-        # Login button that opens popup window
+        # Login button - direct link with target="_top" to break out of iframe
         st.markdown(
             f"""
             <div style='text-align: center; margin: 2rem 0;'>
-                <button onclick="openGoogleAuth()" style="
+                <a href="{auth_url}" target="_top" style="
                     display: inline-block;
                     padding: 14px 28px;
                     background: #4285f4;
                     color: white;
-                    border: none;
+                    text-decoration: none;
                     border-radius: 6px;
                     font-weight: 500;
                     font-size: 16px;
-                    cursor: pointer;
                     box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3);
-                    transition: all 0.2s;
-                " onmouseover="this.style.background='#3367d6'" onmouseout="this.style.background='#4285f4'">
-                    <span style="margin-right: 8px;">🔐</span> Sign in with Google
-                </button>
+                ">
+                    🔐 Sign in with Google
+                </a>
             </div>
-            <script>
-                function openGoogleAuth() {{
-                    // Open popup
-                    var width = 500;
-                    var height = 600;
-                    var left = (screen.width - width) / 2;
-                    var top = (screen.height - height) / 2;
-                    var popup = window.open(
-                        '{auth_url}',
-                        'Google Sign In',
-                        'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',scrollbars=yes'
-                    );
-                    
-                    // Check if popup was blocked
-                    if (!popup || popup.closed || typeof popup.closed == 'undefined') {{
-                        // Popup blocked, navigate directly
-                        window.top.location.href = '{auth_url}';
-                    }}
-                }}
-            </script>
             """,
             unsafe_allow_html=True
         )
