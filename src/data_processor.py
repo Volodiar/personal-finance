@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Union, Optional, Tuple
 from io import BytesIO, StringIO
 import pdfplumber
+import streamlit as st # For debugging
 
 from categories import categorize_concept
 
@@ -167,11 +168,13 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
     try:
         # Open PDF (handle both path string and file object)
         with pdfplumber.open(file) as pdf:
-            for page in pdf.pages:
+            st.write(f"DEBUG: Processing PDF with {len(pdf.pages)} pages")
+            for page_num, page in enumerate(pdf.pages):
                 # Extract tables using default settings which usually work well for grid-like tables
                 tables = page.extract_tables()
+                st.write(f"DEBUG: Page {page_num+1} - Found {len(tables)} tables")
                 
-                for table in tables:
+                for table_idx, table in enumerate(tables):
                     if not table:
                         continue
                         
@@ -179,14 +182,18 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                     header_idx = -1
                     headers = []
                     
-                    for i, row in enumerate(table):
+                    st.write(f"DEBUG: Table {table_idx} first 5 rows:")
+                    for i, row in enumerate(table[:5]):
                         # Filter None values and convert to string
                         row_text = [str(cell).strip().upper() for cell in row if cell is not None]
+                        st.write(f"Row {i}: {row_text}")
                         
                         # Check for key columns
-                        if 'FECHA' in row_text and ('DESCRIPCIÓN' in row_text or 'DESCRIPTION' in row_text):
+                        # Relaxed check: Just FECHA and DESCRIPTION/DESCRIPCIÓN
+                        if 'FECHA' in row_text and any('DESC' in col for col in row_text):
                             header_idx = i
                             headers = row_text
+                            st.write(f"DEBUG: FOUND HEADERS at row {i}: {headers}")
                             break
                     
                     if header_idx != -1:

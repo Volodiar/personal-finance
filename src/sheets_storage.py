@@ -51,11 +51,8 @@ def get_spreadsheet():
         st.error("Could not create gspread client!")
         return None
     try:
-        url = st.secrets.get("spreadsheet_url", "")
-        st.write(f"Spreadsheet URL: {url[:50]}...")
         if url:
             spreadsheet = client.open_by_url(url)
-            st.write(f"Opened spreadsheet: {spreadsheet.title}")
             return spreadsheet
         else:
             st.warning("No spreadsheet_url in secrets, trying by name...")
@@ -131,8 +128,7 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
         worksheet_name = get_worksheet_name(account_hash, data_user_id)
         headers = ['Date', 'Concept', 'Amount', 'Category']
         
-        st.write(f"Saving to worksheet: {worksheet_name}")
-        st.write(f"DataFrame has {len(df)} rows")
+        st.info(f"Saving {len(df)} transactions...")
         
         ws = ensure_worksheet(spreadsheet, worksheet_name, headers)
         ws.clear()
@@ -148,11 +144,9 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
                 df_copy[col] = ''
         
         data = [headers] + df_copy[headers].fillna('').values.tolist()
-        st.write(f"Uploading {len(data)} rows (including header)")
         
         ws.update('A1', data)
         
-        st.write(f"Upload complete!")
         return True
     except Exception as e:
         st.error(f"Error saving data: {e}")
