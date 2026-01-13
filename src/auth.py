@@ -154,27 +154,8 @@ def show_oauth_login(config: Dict) -> bool:
         # Generate auth URL
         auth_url = get_authorization_url(config)
         
-        # Login button - direct link with target="_top" to break out of iframe
-        st.markdown(
-            f"""
-            <div style='text-align: center; margin: 2rem 0;'>
-                <a href="{auth_url}" target="_top" style="
-                    display: inline-block;
-                    padding: 14px 28px;
-                    background: #4285f4;
-                    color: white;
-                    text-decoration: none;
-                    border-radius: 6px;
-                    font-weight: 500;
-                    font-size: 16px;
-                    box-shadow: 0 2px 8px rgba(66, 133, 244, 0.3);
-                ">
-                    🔐 Sign in with Google
-                </a>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # Use Streamlit's native link_button which handles iframe navigation
+        st.link_button("🔐 Sign in with Google", auth_url, use_container_width=True)
         
         st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 2rem;'>Your data is private and secure.</p>", unsafe_allow_html=True)
     
