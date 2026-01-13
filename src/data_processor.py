@@ -162,10 +162,20 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
             
             # Store coordinates from first page to use on subsequent pages
             last_header_coords = None
+            statement_year = str(datetime.now().year) # Default to current year
             
             for page_num, page in enumerate(pdf.pages):
                 width = page.width
                 words = page.extract_words(x_tolerance=3, y_tolerance=3, keep_blank_chars=False)
+                
+                # Try to find statement year on first page
+                if page_num == 0:
+                    # Look for date range like "01 dic 2025 - 31 dic 2025"
+                    page_text = page.extract_text()
+                    year_match = re.search(r'\d{2}\s+[a-zA-Z]{3}\s+(\d{4})', page_text)
+                    if year_match:
+                        statement_year = year_match.group(1)
+                        st.write(f"DEBUG: Found statement year: {statement_year}")
                 
                 # 1. Detect Header Positions
                 header_y = -1
@@ -283,20 +293,25 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                     date_str = ""
                     concept_str = full_text
                     
-                    # Regex for "DD MMM YYYY" (e.g., "01 dic 2025")
+                    # Regex for "DD MMM YYYY" OR "DD MMM"
                     # Spanish months are 3 chars
-                    date_match = re.match(r'^(\d{2}\s+[a-zA-Z]{3}\s+\d{4})\s+(.*)', full_text)
+                    # Try full date first
+                    date_match_full = re.match(r'^(\d{2}\s+[a-zA-Z]{3}\s+\d{4})\s+(.*)', full_text)
                     
-                    if date_match:
-                        date_str = date_match.group(1)
-                        concept_str = date_match.group(2)
+                    if date_match_full:
+                        date_str = date_match_full.group(1)
+                        concept_str = date_match_full.group(2)
                     else:
-                        # Fallback: Maybe just "DD MMM" or other formats?
-                        # For now, if we match the start, we take it.
-                        match_simple = re.match(r'^(\d{2}\s+[a-zA-Z]{3})\s+(.*)', full_text) # Missing year?
-                        if match_simple:
-                           # This might be risky if year is on next line or missing
-                           pass
+                        # Try partial date (DD MMM) and append statement year
+                        date_match_partial = re.match(r'^(\d{2}\s+[a-zA-Z]{3})\s+(.*)', full_text)
+                        if date_match_partial:
+                            date_part = date_match_partial.group(1)
+                            # Only add year if not already present
+                            if len(date_part.split()) == 2:
+                                date_str = f"{date_part} {statement_year}"
+                            else:
+                                date_str = date_part
+                            concept_str = date_match_partial.group(2)
                     
                     # Basic validation: needs date
                     if not date_str:
