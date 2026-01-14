@@ -1066,8 +1066,14 @@ def save_processed_data(edited_df: pd.DataFrame):
                  return
 
             # Sheets storage returns a dict {'added': int, 'duplicates': int}
-            result = add_transactions_sheets(account_hash, user, original_df)
+            # Use the ID, not the name!
+            data_user_to_use = st.session_state.get('selected_data_user_id') or user.lower().replace(' ', '_')
+            result = add_transactions_sheets(account_hash, data_user_to_use, original_df)
             
+            if 'error' in result:
+                st.error(f"❌ {result['error']}")
+                return
+
             new_count = result.get('added', 0)
             dup_count = result.get('duplicates', 0)
             updated_count = 0 # Sheets logic doesn't track updates yet

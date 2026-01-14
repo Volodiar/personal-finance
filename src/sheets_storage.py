@@ -166,7 +166,9 @@ def add_transactions(account_hash: str, data_user_id: str, new_df: pd.DataFrame)
     existing = load_data_user_transactions(account_hash, data_user_id)
     
     if existing.empty:
-        save_data_user_transactions(account_hash, data_user_id, new_df)
+        success = save_data_user_transactions(account_hash, data_user_id, new_df)
+        if not success:
+            return {'added': 0, 'duplicates': 0, 'error': 'Failed to save to new worksheet'}
         return {'added': len(new_df), 'duplicates': 0}
     
     def create_id(row):
