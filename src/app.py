@@ -956,6 +956,9 @@ def render_editable_table():
             display_df.loc[mask, 'Category'] = 'Others'
             # Also update session state
             st.session_state.processed_data.loc[mask, 'Category'] = 'Others'
+            # Force reload of the data editor by clearing its state
+            if "category_editor" in st.session_state:
+                del st.session_state["category_editor"]
             st.rerun()
     
     st.markdown("<br>", unsafe_allow_html=True)

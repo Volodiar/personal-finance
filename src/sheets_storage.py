@@ -190,7 +190,9 @@ def add_transactions(account_hash: str, data_user_id: str, new_df: pd.DataFrame)
     
     if new_rows:
         combined = pd.concat([existing, pd.DataFrame(new_rows)], ignore_index=True)
-        save_data_user_transactions(account_hash, data_user_id, combined)
+        success = save_data_user_transactions(account_hash, data_user_id, combined)
+        if not success:
+            return {'added': 0, 'duplicates': 0, 'error': 'Failed to save merged transactions'}
     
     return {'added': len(new_rows), 'duplicates': duplicates}
 
