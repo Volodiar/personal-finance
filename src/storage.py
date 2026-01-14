@@ -10,8 +10,9 @@ import json
 import hashlib
 import pandas as pd
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 from datetime import datetime
+import streamlit as st
 
 # Base paths relative to project root
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -129,59 +130,113 @@ def create_transaction_id(row: pd.Series) -> str:
 def load_user_data(user: str) -> pd.DataFrame:
     """
     Load consolidated transaction data for a user.
+    ROUTES TO SHEETS STORAGE IN CLOUD MODE.
     
     Args:
-        user: 'masha' or 'pablo'
+        user: User name or ID
         
     Returns:
         DataFrame with all user transactions
     """
-    ensure_directories()
+    from sheets_storage import is_cloud_mode, load_data_user_transactions
     
-    filepath = get_user_data_file(user)
-    
-    if not filepath.exists():
-        return pd.DataFrame()
-    
-    try:
-        df = pd.read_csv(filepath, encoding='utf-8')
+    if is_cloud_mode():
+        # CLOUD MODE
+        from auth import get_current_user
+        from accounts import get_account_hash
         
-        # Parse dates
-        if 'Date' in df.columns:
-            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        current_email = get_current_user().get('email')
+        if not current_email:
+            return pd.DataFrame()
+            
+        # Get account hash
+        account_hash = get_account_hash(current_email)
         
-        return df
-    except Exception:
-        return pd.DataFrame()
+        # In cloud mode, we need the user ID (folder name)
+        # We might have been passed the name or the ID.
+        # Let's try to resolve it using user_manager
+        from user_manager import get_user_by_name, get_user_folder
+        
+        user_info = get_user_by_name(user)
+        user_id = user_info['folder'] if user_info else user.lower().replace(' ', '_')
+        
+        return load_data_user_transactions(account_hash, user_id)
+        
+    else:
+        # LOCAL MODE
+        ensure_directories()
+        
+        filepath = get_user_data_file(user)
+        
+        if not filepath.exists():
+            return pd.DataFrame()
+        
+        try:
+            df = pd.read_csv(filepath, encoding='utf-8')
+            
+            # Parse dates
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            
+            return df
+        except Exception:
+            return pd.DataFrame()
 
 
 def save_user_data(user: str, df: pd.DataFrame) -> str:
     """
     Save consolidated transaction data for a user.
+    ROUTES TO SHEETS STORAGE IN CLOUD MODE.
     
     Args:
-        user: 'masha' or 'pablo'
+        user: User name
         df: DataFrame with all transactions
         
     Returns:
-        Path to saved file
+        Path to saved file (or description)
     """
-    ensure_directories()
+    from sheets_storage import is_cloud_mode, save_data_user_transactions
     
-    filepath = get_user_data_file(user)
-    
-    # Ensure consistent column order
-    output_columns = ['TransactionID', 'Concepto', 'Amount', 'Category', 'Date']
-    available_columns = [col for col in output_columns if col in df.columns]
-    
-    # Add any extra columns
-    for col in df.columns:
-        if col not in available_columns:
-            available_columns.append(col)
-    
-    df[available_columns].to_csv(filepath, index=False, encoding='utf-8')
-    
-    return str(filepath)
+    if is_cloud_mode():
+        # CLOUD MODE
+        from auth import get_current_user
+        from accounts import get_account_hash
+        from user_manager import get_user_by_name
+        
+        current_email = get_current_user().get('email')
+        if not current_email:
+            return "Error: Not logged in"
+            
+        account_hash = get_account_hash(current_email)
+        
+        # Resolve ID
+        user_info = get_user_by_name(user)
+        user_id = user_info['folder'] if user_info else user.lower().replace(' ', '_')
+        
+        success = save_data_user_transactions(account_hash, user_id, df)
+        return "Google Sheets" if success else "Error saving to Sheets"
+        
+    else:
+        # LOCAL MODE
+        ensure_directories()
+        
+        filepath = get_user_data_file(user)
+        
+        # Ensure user directory exists (dynamic creation)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Ensure consistent column order
+        output_columns = ['TransactionID', 'Concepto', 'Amount', 'Category', 'Date']
+        available_columns = [col for col in output_columns if col in df.columns]
+        
+        # Add any extra columns
+        for col in df.columns:
+            if col not in available_columns:
+                available_columns.append(col)
+        
+        df[available_columns].to_csv(filepath, index=False, encoding='utf-8')
+        
+        return str(filepath)
 
 
 def merge_transactions(existing_df: pd.DataFrame, new_df: pd.DataFrame) -> Tuple[pd.DataFrame, int, int, int]:
@@ -315,15 +370,19 @@ def add_transactions(user: str, new_df: pd.DataFrame) -> Tuple[str, int, int, in
 
 def load_all_data() -> dict:
     """
-    Load all data for both users.
-    
-    Returns:
-        Dict with 'masha' and 'pablo' DataFrames
+    Load all data for all users.
     """
-    return {
-        'masha': load_user_data('masha'),
-        'pablo': load_user_data('pablo')
-    }
+    from user_manager import load_users
+    
+    users = load_users()
+    result = {}
+    
+    for user in users:
+        # load_user_data expects user name or ID, let's pass name as it resolves it
+        name = user['name']
+        result[name.lower()] = load_user_data(name)
+        
+    return result
 
 
 def get_available_months(user: Optional[str] = None) -> list:
