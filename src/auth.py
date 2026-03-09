@@ -141,24 +141,109 @@ def check_password() -> bool:
 
 
 def show_oauth_login(config: Dict) -> bool:
-    """Show Google OAuth login screen with popup."""
+    """Show Google OAuth login screen - premium fintech design."""
+    auth_url = get_authorization_url(config)
+
+    st.markdown("""
+    <style>
+    .login-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 80vh;
+        padding: 2rem;
+    }
+    .login-card {
+        background: var(--bg-card);
+        backdrop-filter: blur(20px);
+        border: 1px solid var(--border-color);
+        border-radius: 24px;
+        padding: 3rem 2.5rem;
+        max-width: 420px;
+        width: 100%;
+        text-align: center;
+        box-shadow: 0 20px 60px var(--shadow), 0 0 0 1px var(--border-color);
+    }
+    .app-logo {
+        font-size: 3.5rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+    .app-name {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-pink));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 0.25rem;
+    }
+    .app-tagline {
+        color: var(--text-secondary);
+        font-size: 0.95rem;
+        margin-bottom: 2.5rem;
+    }
+    .feature-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 2.5rem;
+        text-align: left;
+    }
+    .feature-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+    .feature-icon {
+        font-size: 1.1rem;
+        width: 1.5rem;
+        text-align: center;
+    }
+    .privacy-note {
+        margin-top: 1.5rem;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+    }
+    </style>
+
+    <div class="login-container">
+        <div class="login-card">
+            <span class="app-logo">💰</span>
+            <div class="app-name">FinanceApp</div>
+            <div class="app-tagline">Smart Financial Tracking & Insights</div>
+
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-icon">📊</span>
+                    <span>Track expenses across multiple profiles</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🔮</span>
+                    <span>AI-powered spending insights & predictions</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🎯</span>
+                    <span>Budget management & savings goals</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🔒</span>
+                    <span>Your data, private and secure</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Center the Google sign-in button
     col1, col2, col3 = st.columns([1, 2, 1])
-    
     with col2:
-        st.markdown("<h1 style='text-align: center;'>💰 Personal Finance</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.7); margin-bottom: 2rem;'>Smart Financial Tracking & Insights</p>", unsafe_allow_html=True)
-        
-        st.markdown("<h3 style='text-align: center;'>Welcome!</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.7);'>Sign in with your Google account to access your financial data.</p>", unsafe_allow_html=True)
-        
-        # Generate auth URL
-        auth_url = get_authorization_url(config)
-        
-        # Use Streamlit's native link_button which handles iframe navigation
-        st.link_button("🔐 Sign in with Google", auth_url, use_container_width=True)
-        
-        st.markdown("<p style='text-align: center; color: rgba(255,255,255,0.5); font-size: 0.8rem; margin-top: 2rem;'>Your data is private and secure.</p>", unsafe_allow_html=True)
-    
+        st.link_button("Sign in with Google →", auth_url, use_container_width=True)
+        st.markdown('<div class="privacy-note" style="text-align: center;">By signing in, you agree to our privacy policy. We only access your email address.</div>', unsafe_allow_html=True)
+
     return False
 
 

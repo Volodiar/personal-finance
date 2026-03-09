@@ -105,7 +105,11 @@ def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.Data
             return pd.DataFrame()
         
         df = pd.DataFrame(data)
-        
+
+        # Normalize column name for consistency with data_processor output
+        if 'Concept' in df.columns and 'Concepto' not in df.columns:
+            df = df.rename(columns={'Concept': 'Concepto'})
+
         if 'Amount' in df.columns:
             df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
         if 'Date' in df.columns:
@@ -129,8 +133,6 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
         worksheet_name = get_worksheet_name(account_hash, data_user_id)
         headers = ['Date', 'Concept', 'Amount', 'Category']
         
-        st.info(f"Saving {len(df)} transactions...")
-        
         ws = ensure_worksheet(spreadsheet, worksheet_name, headers)
         ws.clear()
         
@@ -141,7 +143,6 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
         # Ensure we have all columns
         for col in headers:
             if col not in df_copy.columns:
-                st.warning(f"Missing column: {col}, adding empty")
                 df_copy[col] = ''
         
         data = [headers] + df_copy[headers].fillna('').values.tolist()
@@ -173,7 +174,7 @@ def add_transactions(account_hash: str, data_user_id: str, new_df: pd.DataFrame)
     
     def create_id(row):
         date = str(row.get('Date', ''))[:10]
-        concept = str(row.get('Concept', '')).strip().lower()
+        concept = str(row.get('Concept', row.get('Concepto', ''))).strip().lower()
         amount = f"{float(row.get('Amount', 0)):.2f}"
         return f"{date}|{concept}|{amount}"
     

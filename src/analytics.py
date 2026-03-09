@@ -770,26 +770,26 @@ def get_category_summary(df: pd.DataFrame) -> pd.DataFrame:
 # COMPARISON
 # ============================================================================
 
-def create_comparison_bar_chart(masha_df: pd.DataFrame, pablo_df: pd.DataFrame) -> go.Figure:
+def create_comparison_bar_chart(user1_df: pd.DataFrame, user2_df: pd.DataFrame, name1: str = "User 1", name2: str = "User 2") -> go.Figure:
     """Create side-by-side bar chart comparing expenses between users."""
-    masha_totals = _get_category_totals(masha_df)
-    pablo_totals = _get_category_totals(pablo_df)
-    
-    all_categories = set(masha_totals.keys()) | set(pablo_totals.keys())
+    user1_totals = _get_category_totals(user1_df)
+    user2_totals = _get_category_totals(user2_df)
+
+    all_categories = set(user1_totals.keys()) | set(user2_totals.keys())
     all_categories = {c for c in all_categories if c != 'Income'}
-    
+
     if not all_categories:
         return _create_empty_chart("No data available for comparison")
-    
+
     categories = sorted(list(all_categories))
-    masha_values = [masha_totals.get(cat, 0) for cat in categories]
-    pablo_values = [pablo_totals.get(cat, 0) for cat in categories]
-    
+    user1_values = [user1_totals.get(cat, 0) for cat in categories]
+    user2_values = [user2_totals.get(cat, 0) for cat in categories]
+
     fig = go.Figure(data=[
-        go.Bar(name='Masha', x=categories, y=masha_values, marker_color='#FF6B9D',
-               hovertemplate='<b>Masha</b><br>%{x}: €%{y:,.2f}<extra></extra>'),
-        go.Bar(name='Pablo', x=categories, y=pablo_values, marker_color='#4ECDC4',
-               hovertemplate='<b>Pablo</b><br>%{x}: €%{y:,.2f}<extra></extra>')
+        go.Bar(name=name1, x=categories, y=user1_values, marker_color='#FF6B9D',
+               hovertemplate=f'<b>{name1}</b><br>%{{x}}: €%{{y:,.2f}}<extra></extra>'),
+        go.Bar(name=name2, x=categories, y=user2_values, marker_color='#4ECDC4',
+               hovertemplate=f'<b>{name2}</b><br>%{{x}}: €%{{y:,.2f}}<extra></extra>')
     ])
     
     fig.update_layout(

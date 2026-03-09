@@ -7,13 +7,16 @@ amount conversion, and date parsing for Spanish/Imagin Bank formats.
 
 import pandas as pd
 import re
+import logging
 from datetime import datetime
 from typing import Union, Optional, Tuple
 from io import BytesIO, StringIO
 import pdfplumber
-import streamlit as st # For debugging
+import streamlit as st
 
 from categories import categorize_concept
+
+logger = logging.getLogger(__name__)
 
 
 def preprocess_amount(importe_str: str) -> float:
@@ -158,7 +161,7 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
     
     try:
         with pdfplumber.open(file) as pdf:
-            st.write(f"DEBUG: Processing PDF with {len(pdf.pages)} pages")
+            logger.debug("Processing PDF with %d pages", len(pdf.pages))
             
             # Store coordinates from first page to use on subsequent pages
             last_header_coords = None
@@ -175,7 +178,7 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                     year_match = re.search(r'\d{2}\s+[a-zA-Z]{3}\s+(\d{4})', page_text)
                     if year_match:
                         statement_year = year_match.group(1)
-                        st.write(f"DEBUG: Found statement year: {statement_year}")
+                        logger.debug("Found statement year: %s", statement_year)
                 
                 # 1. Detect Header Positions
                 header_y = -1
@@ -210,19 +213,19 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                         'x_balance': x_balance
                     }
                     
-                    st.write(f"DEBUG: Page {page_num+1} Headers found at Y={header_y:.2f}. "
-                             f"X-Coords: Income={x_income:.2f}, Expense={x_expense:.2f}, Balance={x_balance:.2f}")
+                    logger.debug("Page %d Headers found at Y=%.2f. X-Coords: Income=%.2f, Expense=%.2f, Balance=%.2f",
+                                page_num+1, header_y, x_income, x_expense, x_balance)
 
                 elif last_header_coords:
                     # Use coordinates from previous page
                     x_income = last_header_coords['x_income']
                     x_expense = last_header_coords['x_expense']
                     x_balance = last_header_coords['x_balance']
-                    st.write(f"DEBUG: Page {page_num+1} using inherited headers. X-Coords: Income={x_income:.2f}")
+                    logger.debug("Page %d using inherited headers. X-Coords: Income=%.2f", page_num+1, x_income)
                     # Assume no header processing needed, start near top
                     header_y = 50 
                 else:
-                    st.warning(f"DEBUG: Page {page_num+1} - Could not find headers (ENTRADA/SALIDA) and no previous headers. Skipping page.")
+                    logger.warning("Page %d - Could not find headers (ENTRADA/SALIDA) and no previous headers. Skipping page.", page_num+1)
                     continue
 
                 # 2. Group words by line (using top coordinate)
@@ -252,7 +255,7 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                     lines.append(current_line)
                 
                 # 3. Process Lines
-                st.write(f"DEBUG: Page {page_num+1} - Processing {len(lines)} detected lines")
+                logger.debug("Page %d - Processing %d detected lines", page_num+1, len(lines))
                 
                 for line in lines:
                     # Sort words in line by x0
@@ -315,7 +318,7 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                     
                     # Basic validation: needs date
                     if not date_str:
-                         st.write(f"DEBUG: Skipping line (No Date): {full_text}")
+                         logger.debug("Skipping line (No Date): %s", full_text)
                          continue
 
                     # Clean amount strings
@@ -337,7 +340,7 @@ def parse_pdf_file(file: Union[BytesIO, str]) -> pd.DataFrame:
                             'Income': income_val, # Keep raw for debug if needed
                             'Expense': expense_val
                         })
-                        st.write(f"DEBUG: Extracted -> Date: {date_str} | Concept: {concept_str} | Amount: {amount}")
+                        logger.debug("Extracted -> Date: %s | Concept: %s | Amount: %s", date_str, concept_str, amount)
 
     except Exception as e:
         import traceback
