@@ -39,11 +39,27 @@ def ensure_directories():
 
 def load_learned_mappings() -> dict:
     """
-    Load learned concept-to-category mappings from JSON.
+    Load learned concept-to-category mappings.
+    ROUTES TO SHEETS STORAGE IN CLOUD MODE.
     
     Returns:
         Dict of concept -> category pairs
     """
+    from sheets_storage import is_cloud_mode, load_account_mappings
+    
+    if is_cloud_mode():
+        # CLOUD MODE
+        from auth import get_current_user
+        from accounts import get_account_hash
+        current_email = get_current_user().get('email')
+        if current_email:
+            account_hash = get_account_hash(current_email)
+            return load_account_mappings(account_hash)
+        else:
+            # Fallback if somehow not logged in
+            pass
+            
+    # LOCAL MODE FALLBACK
     ensure_directories()
     
     try:
@@ -56,11 +72,25 @@ def load_learned_mappings() -> dict:
 
 def save_learned_mappings(mappings: dict):
     """
-    Save learned mappings to JSON file.
+    Save learned mappings.
+    ROUTES TO SHEETS STORAGE IN CLOUD MODE.
     
     Args:
         mappings: Dict of concept -> category pairs
     """
+    from sheets_storage import is_cloud_mode, save_account_mappings
+    
+    if is_cloud_mode():
+        # CLOUD MODE
+        from auth import get_current_user
+        from accounts import get_account_hash
+        current_email = get_current_user().get('email')
+        if current_email:
+            account_hash = get_account_hash(current_email)
+            save_account_mappings(account_hash, mappings)
+            return
+            
+    # LOCAL MODE FALLBACK
     ensure_directories()
     
     data = {'learned_mappings': mappings}

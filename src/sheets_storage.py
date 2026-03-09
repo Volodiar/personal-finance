@@ -147,7 +147,7 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
         
         data = [headers] + df_copy[headers].fillna('').values.tolist()
         
-        ws.update('A1', data)
+        ws.update(values=data, range_name='A1', value_input_option='RAW')
         
         return True
     except Exception as e:
@@ -216,6 +216,71 @@ def load_all_data_users_transactions(account_hash: str, data_users: List[Dict]) 
         if not df.empty:
             result[du.get('name', data_user_id)] = df
     return result
+
+
+def load_account_mappings(account_hash: str) -> dict:
+    """
+    Load learned category mappings for an account from Google Sheets.
+    
+    Args:
+        account_hash: The unique hash identifying the account
+        
+    Returns:
+        Dict of concept -> category pairs
+    """
+    spreadsheet = get_spreadsheet()
+    if not spreadsheet:
+        return {}
+        
+    try:
+        worksheet_name = f"{account_hash}_mappings"
+        ws = spreadsheet.worksheet(worksheet_name)
+        data = ws.get_all_records()
+        
+        mappings = {}
+        for row in data:
+            concept = str(row.get('Concept', '')).strip()
+            category = str(row.get('Category', '')).strip()
+            if concept and category:
+                mappings[concept] = category
+                
+        return mappings
+    except Exception:
+        # Worksheet might not exist yet
+        return {}
+
+
+def save_account_mappings(account_hash: str, mappings: dict) -> bool:
+    """
+    Save learned category mappings for an account to Google Sheets.
+    
+    Args:
+        account_hash: The unique hash identifying the account
+        mappings: Dict of concept -> category pairs
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    spreadsheet = get_spreadsheet()
+    if not spreadsheet:
+        return False
+        
+    try:
+        worksheet_name = f"{account_hash}_mappings"
+        headers = ['Concept', 'Category']
+        
+        ws = ensure_worksheet(spreadsheet, worksheet_name, headers)
+        ws.clear()
+        
+        data = [headers]
+        for concept, category in mappings.items():
+            data.append([concept, category])
+            
+        ws.update(values=data, range_name='A1', value_input_option='RAW')
+        return True
+    except Exception as e:
+        st.error(f"Error saving mappings to Sheets: {e}")
+        return False
 
 
 def is_cloud_mode() -> bool:

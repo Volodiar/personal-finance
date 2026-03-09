@@ -62,12 +62,18 @@ def render_transaction_explorer(data: pd.DataFrame, user_display: str):
         filtered = filtered.sort_values('Category', ascending=True)
     
     # Prepare display columns
-    if 'Date' in filtered.columns:
+    filtered = filtered.copy()
+    if 'Date' in filtered.columns and len(filtered) > 0:
         filtered['DateDisplay'] = filtered['Date'].apply(
             lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else ''
         )
     else:
-        filtered['DateDisplay'] = ''
+        filtered['DateDisplay'] = pd.Series(dtype='object')
+
+    # Ensure required columns exist for display_df
+    for col in ['Concepto', 'Amount', 'Category']:
+        if col not in filtered.columns:
+            filtered[col] = 0.0 if col == 'Amount' else ''
     
     # Add Select column for row selection
     display_df = filtered[['DateDisplay', 'Concepto', 'Amount', 'Category']].copy().reset_index(drop=True)
