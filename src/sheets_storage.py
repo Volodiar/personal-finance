@@ -25,44 +25,42 @@ SCOPES = [
 ]
 
 
+@st.cache_resource(show_spinner=False)
 def get_gspread_client():
-    """Get authenticated gspread client."""
+    """Get authenticated gspread client. Cached for the lifetime of the server process."""
     if not GSPREAD_AVAILABLE:
-        st.error("gspread not installed!")
         return None
     try:
         creds_dict = st.secrets.get("gcp_service_account", None)
         if not creds_dict:
-            st.error("No gcp_service_account in secrets!")
             return None
         creds = Credentials.from_service_account_info(dict(creds_dict), scopes=SCOPES)
         return gspread.authorize(creds)
-    except Exception as e:
-        st.error(f"Could not create gspread client: {e}")
-        import traceback
-        st.code(traceback.format_exc())
+    except Exception:
         return None
 
 
+@st.cache_resource(show_spinner=False)
 def get_spreadsheet():
-    """Get the main spreadsheet."""
+    """Get the main spreadsheet. Cached for the lifetime of the server process."""
     client = get_gspread_client()
     if not client:
-        st.error("Could not create gspread client!")
         return None
     try:
         url = st.secrets.get("spreadsheet_url", "")
         if url:
-            spreadsheet = client.open_by_url(url)
-            return spreadsheet
-        else:
-            st.warning("No spreadsheet_url in secrets, trying by name...")
-            return client.open("Personal Finance Data")
+            return client.open_by_url(url)
+        return client.open("Personal Finance Data")
     except Exception as e:
         st.error(f"Could not open spreadsheet: {e}")
-        import traceback
-        st.code(traceback.format_exc())
         return None
+
+
+def clear_sheets_cache():
+    """Invalidate all cached read data (call after any write operation)."""
+    load_data_user_transactions.clear()
+    load_account_mappings.clear()
+    load_all_data_users_transactions.clear()
 
 
 def get_worksheet_name(account_hash: str, data_user_id: str) -> str:
@@ -81,29 +79,23 @@ def ensure_worksheet(spreadsheet, name: str, headers: List[str] = None):
         return ws
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.DataFrame:
     """
-    Load transactions for a specific data user.
-    
-    Args:
-        account_hash: The account's unique hash
-        data_user_id: The data user's ID
-        
-    Returns:
-        DataFrame with transactions
+    Load transactions for a specific data user. Results cached for 5 minutes.
     """
     spreadsheet = get_spreadsheet()
     if not spreadsheet:
         return pd.DataFrame()
-    
+
     try:
         worksheet_name = get_worksheet_name(account_hash, data_user_id)
         ws = spreadsheet.worksheet(worksheet_name)
         data = ws.get_all_records()
-        
+
         if not data:
             return pd.DataFrame()
-        
+
         df = pd.DataFrame(data)
 
         # Normalize column name for consistency with data_processor output
@@ -114,9 +106,9 @@ def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.Data
             df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
         if 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        
+
         return df
-    except:
+    except Exception:
         return pd.DataFrame()
 
 
@@ -149,6 +141,8 @@ def save_data_user_transactions(account_hash: str, data_user_id: str, df: pd.Dat
         
         ws.update(values=data, range_name='A1', value_input_option='RAW')
         
+        # Invalidate stale cached reads for this user
+        clear_sheets_cache()
         return True
     except Exception as e:
         st.error(f"Error saving data: {e}")
@@ -198,7 +192,8 @@ def add_transactions(account_hash: str, data_user_id: str, new_df: pd.DataFrame)
     return {'added': len(new_rows), 'duplicates': duplicates}
 
 
-def load_all_data_users_transactions(account_hash: str, data_users: List[Dict]) -> Dict[str, pd.DataFrame]:
+@st.cache_data(ttl=300, show_spinner=False)
+def load_all_data_users_transactions(account_hash: str, data_users: tuple) -> Dict[str, pd.DataFrame]:
     """
     Load transactions for all data users of an account (for joint view).
     
@@ -210,7 +205,9 @@ def load_all_data_users_transactions(account_hash: str, data_users: List[Dict]) 
         Dict mapping data_user_id to DataFrame
     """
     result = {}
-    for du in data_users:
+    for du_tuple in data_users:
+        # data_users is tuple of tuple-pairs for hashability; convert back to dict
+        du = dict(du_tuple) if isinstance(du_tuple, tuple) else du_tuple
         data_user_id = du.get('id', du.get('name', '').lower())
         df = load_data_user_transactions(account_hash, data_user_id)
         if not df.empty:
@@ -218,6 +215,7 @@ def load_all_data_users_transactions(account_hash: str, data_users: List[Dict]) 
     return result
 
 
+@st.cache_data(ttl=300, show_spinner=False)
 def load_account_mappings(account_hash: str) -> dict:
     """
     Load learned category mappings for an account from Google Sheets.
@@ -277,6 +275,7 @@ def save_account_mappings(account_hash: str, mappings: dict) -> bool:
             data.append([concept, category])
             
         ws.update(values=data, range_name='A1', value_input_option='RAW')
+        clear_sheets_cache()
         return True
     except Exception as e:
         st.error(f"Error saving mappings to Sheets: {e}")

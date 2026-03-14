@@ -117,4 +117,7 @@ class CloudDataProvider(DataProvider):
         account_hash = accounts.get_account_hash(email)
         data_users = accounts.get_data_users(email)
         
-        return sheets_storage.load_all_data_users_transactions(account_hash, data_users)
+        # Convert to tuple of tuples for hashability (cache_data requirement)
+        data_users_tuple = tuple(tuple(sorted(du.items())) for du in data_users)
+        
+        return sheets_storage.load_all_data_users_transactions(account_hash, data_users_tuple)
