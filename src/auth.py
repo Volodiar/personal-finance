@@ -146,103 +146,68 @@ def show_oauth_login(config: Dict) -> bool:
 
     st.markdown("""
     <style>
-    .login-container {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        min-height: 80vh;
-        padding: 2rem;
-    }
-    .login-card {
-        background: var(--bg-card);
-        backdrop-filter: blur(20px);
-        border: 1px solid var(--border-color);
-        border-radius: 24px;
-        padding: 3rem 2.5rem;
-        max-width: 420px;
-        width: 100%;
-        text-align: center;
-        box-shadow: 0 20px 60px var(--shadow), 0 0 0 1px var(--border-color);
-    }
-    .app-logo {
-        font-size: 3.5rem;
-        margin-bottom: 1rem;
-        display: block;
-    }
-    .app-name {
-        font-size: 2rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, var(--accent-primary), var(--accent-pink));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        margin-bottom: 0.25rem;
-    }
-    .app-tagline {
-        color: var(--text-secondary);
-        font-size: 0.95rem;
-        margin-bottom: 2.5rem;
-    }
-    .feature-list {
-        display: flex;
-        flex-direction: column;
-        gap: 0.75rem;
-        margin-bottom: 2.5rem;
-        text-align: left;
-    }
-    .feature-item {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-    }
-    .feature-icon {
-        font-size: 1.1rem;
-        width: 1.5rem;
-        text-align: center;
-    }
-    .privacy-note {
-        margin-top: 1.5rem;
-        color: var(--text-muted);
-        font-size: 0.78rem;
-    }
+    /* Hide Streamlit default header/footer on login */
+    #MainMenu, footer, header { visibility: hidden; }
+    .block-container { padding-top: 2rem !important; }
     </style>
+    """, unsafe_allow_html=True)
 
-    <div class="login-container">
-        <div class="login-card">
-            <span class="app-logo">💰</span>
-            <div class="app-name">FinanceApp</div>
-            <div class="app-tagline">Smart Financial Tracking & Insights</div>
-
-            <div class="feature-list">
-                <div class="feature-item">
-                    <span class="feature-icon">📊</span>
+    # Center the card using columns
+    _, center, _ = st.columns([1, 1.5, 1])
+    with center:
+        st.markdown("""
+        <div style="
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            font-family: 'Inter', sans-serif;
+            margin-top: 3rem;
+        ">
+            <div style="font-size: 3.5rem; margin-bottom: 1rem;">💰</div>
+            <div style="
+                font-size: 2rem;
+                font-weight: 800;
+                background: linear-gradient(135deg, #4ECDC4, #FF6B9D);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+                background-clip: text;
+                margin-bottom: 0.25rem;
+            ">FinanceApp</div>
+            <div style="color: rgba(255,255,255,0.5); font-size: 0.95rem; margin-bottom: 2.5rem;">
+                Smart Financial Tracking &amp; Insights
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; text-align: left; margin-bottom: 2rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; color: rgba(255,255,255,0.65); font-size: 0.9rem;">
+                    <span style="font-size: 1.1rem; width: 1.5rem; text-align: center;">📊</span>
                     <span>Track expenses across multiple profiles</span>
                 </div>
-                <div class="feature-item">
-                    <span class="feature-icon">🔮</span>
-                    <span>AI-powered spending insights & predictions</span>
+                <div style="display: flex; align-items: center; gap: 0.75rem; color: rgba(255,255,255,0.65); font-size: 0.9rem;">
+                    <span style="font-size: 1.1rem; width: 1.5rem; text-align: center;">🔮</span>
+                    <span>AI-powered spending insights &amp; predictions</span>
                 </div>
-                <div class="feature-item">
-                    <span class="feature-icon">🎯</span>
-                    <span>Budget management & savings goals</span>
+                <div style="display: flex; align-items: center; gap: 0.75rem; color: rgba(255,255,255,0.65); font-size: 0.9rem;">
+                    <span style="font-size: 1.1rem; width: 1.5rem; text-align: center;">🎯</span>
+                    <span>Budget management &amp; savings goals</span>
                 </div>
-                <div class="feature-item">
-                    <span class="feature-icon">🔒</span>
+                <div style="display: flex; align-items: center; gap: 0.75rem; color: rgba(255,255,255,0.65); font-size: 0.9rem;">
+                    <span style="font-size: 1.1rem; width: 1.5rem; text-align: center;">🔒</span>
                     <span>Your data, private and secure</span>
                 </div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-    # Center the Google sign-in button
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+        st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
         st.link_button("Sign in with Google →", auth_url, use_container_width=True)
-        st.markdown('<div class="privacy-note" style="text-align: center;">By signing in, you agree to our privacy policy. We only access your email address.</div>', unsafe_allow_html=True)
+        st.markdown(
+            "<div style='text-align: center; color: rgba(255,255,255,0.3); font-size: 0.78rem; margin-top: 0.75rem;'>"
+            "By signing in, you agree to our privacy policy. We only access your email address."
+            "</div>",
+            unsafe_allow_html=True
+        )
 
     return False
 
