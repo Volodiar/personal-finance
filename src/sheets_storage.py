@@ -91,7 +91,10 @@ def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.Data
     try:
         worksheet_name = get_worksheet_name(account_hash, data_user_id)
         ws = spreadsheet.worksheet(worksheet_name)
-        data = ws.get_all_records()
+        # UNFORMATTED_VALUE returns the raw stored number (e.g. 15.15 as float),
+        # bypassing locale-based formatting that renders it as the string '15,15' in
+        # Spanish-locale Google Sheets and silently breaks pd.to_numeric.
+        data = ws.get_all_records(value_render_option='UNFORMATTED_VALUE')
 
         if not data:
             return pd.DataFrame()
@@ -233,7 +236,7 @@ def load_account_mappings(account_hash: str) -> dict:
     try:
         worksheet_name = f"{account_hash}_mappings"
         ws = spreadsheet.worksheet(worksheet_name)
-        data = ws.get_all_records()
+        data = ws.get_all_records(value_render_option='UNFORMATTED_VALUE')
         
         mappings = {}
         for row in data:
