@@ -21,51 +21,70 @@ logger = logging.getLogger(__name__)
 
 def preprocess_amount(importe_str: str) -> float:
     """
-    Convert Spanish-format amount string to float.
-    
-    Handles Imagin Bank format with EUR suffix and Spanish thousand/decimal separators.
-    
-    Examples:
-        "-36,00EUR" -> -36.00
-        "3.980,53EUR" -> 3980.53
-        "-1.234,56 EUR" -> -1234.56
-        "1234.56" -> 1234.56 (already in decimal format)
-        
+    Convert Spanish/English-format amount string to float.
+
+    Handles both formats:
+      - European: 3.980,53 EUR  -> 3980.53 (dot = thousands, comma = decimal)
+      - English:  15.15         -> 15.15   (dot = decimal)
+      - No-separator: -36,00EUR -> -36.00
+      - Integers: 1.500 EUR     -> 1500.0
+
+    Detection heuristic:
+      Look at the LAST separator (dot or comma) in the cleaned string.
+      If more than 2 digits follow it -> it's a thousands separator, not decimal.
+      If 0, 1, or 2 digits follow it  -> it IS the decimal separator.
+
     Args:
-        importe_str: Amount string in Spanish format
-        
+        importe_str: Amount string in any common format
+
     Returns:
         Float value of the amount
     """
     if pd.isna(importe_str) or importe_str == "":
         return 0.0
-    
-    # Convert to string if not already
+
     amount_str = str(importe_str).strip()
-    
+
     if not amount_str:
         return 0.0
-    
+
     # Remove currency symbols (EUR, €) and whitespace
     amount_str = re.sub(r'[€\s]', '', amount_str)
-    amount_str = re.sub(r'EUR$', '', amount_str, flags=re.IGNORECASE)
-    amount_str = amount_str.strip()
-    
+    amount_str = re.sub(r'EUR$', '', amount_str, flags=re.IGNORECASE).strip()
+
     if not amount_str:
         return 0.0
-    
-    # Handle Spanish number format: 3.980,53 -> 3980.53
-    # Check if it's Spanish format (has comma as decimal separator)
-    if ',' in amount_str:
-        # Spanish format: dots are thousand separators, comma is decimal
-        amount_str = amount_str.replace('.', '')  # Remove thousand separators
-        amount_str = amount_str.replace(',', '.')  # Convert decimal separator
-    # else: assume it's already in standard decimal format
-    
+
+    # Detect last separator and what follows it
+    last_dot = amount_str.rfind('.')
+    last_comma = amount_str.rfind(',')
+    last_sep = max(last_dot, last_comma)
+
+    if last_sep == -1:
+        # No separator at all — plain integer-like string
+        try:
+            return float(amount_str)
+        except ValueError:
+            return 0.0
+
+    digits_after = len(amount_str) - last_sep - 1
+
+    if digits_after > 2:
+        # More than 2 digits after separator → it's a thousands separator, not decimal
+        # Remove all separators (it's a whole number like "1.500" or "1,500")
+        amount_str = amount_str.replace('.', '').replace(',', '')
+    elif amount_str[last_sep] == ',':
+        # Comma is the decimal separator (European format: 3.980,53 or 36,00)
+        amount_str = amount_str.replace('.', '').replace(',', '.')
+    else:
+        # Dot is the decimal separator (English format: 15.15 or 3,980.53)
+        amount_str = amount_str.replace(',', '')
+
     try:
         return float(amount_str)
     except ValueError:
         return 0.0
+
 
 
 def parse_date(fecha_str: str) -> Optional[datetime]:

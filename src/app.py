@@ -26,6 +26,7 @@ from ui.components import render_header_controls
 from ui.home import render_home_screen, render_user_home
 from ui.upload import render_upload_screen, render_save_success_screen
 from ui.analytics.main import render_analytics_screen
+from ui.delete import render_delete_screen
 
 def main():
     """Main application entry point."""
@@ -73,6 +74,8 @@ def main():
         render_save_success_screen()
     elif current_screen == 'analytics':
         render_analytics_screen()
+    elif current_screen == 'delete':
+        render_delete_screen()
     elif current_screen == 'joint_analytics':
         # This is now handled inside analytics screen tabs usually, 
         # but if explicit route exists:

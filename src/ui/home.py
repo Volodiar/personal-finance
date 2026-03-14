@@ -55,7 +55,7 @@ def render_home_screen():
     # Quick actions row
     if users:
         st.markdown("<div style='height: 1.5rem;'></div>", unsafe_allow_html=True)
-        act_cols = st.columns(2)
+        act_cols = st.columns(3)
         with act_cols[0]:
             st.markdown("""
             <div class='glass-card' style='text-align: center; padding: 1.25rem;'>
@@ -75,6 +75,16 @@ def render_home_screen():
             """, unsafe_allow_html=True)
             if st.button("Go to Analytics", key="quick_analytics", use_container_width=True):
                 st.session_state['current_screen'] = 'analytics'
+                st.rerun()
+        with act_cols[2]:
+            st.markdown("""
+            <div class='glass-card' style='text-align: center; padding: 1.25rem;'>
+                <span style='font-size: 1.5rem;'>🗑️</span>
+                <p style='margin: 0.4rem 0 0; font-weight: 500; color: var(--text-primary); font-size: 0.95rem;'>Manage / Delete</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.button("Manage Data", key="quick_delete", use_container_width=True):
+                st.session_state['current_screen'] = 'delete'
                 st.rerun()
 
     # Create New Profile section
