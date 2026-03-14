@@ -79,7 +79,7 @@ def ensure_worksheet(spreadsheet, name: str, headers: List[str] = None):
         return ws
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False) # Reduced TTL to 1min for better responsiveness during fixes
 def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.DataFrame:
     """
     Load transactions for a specific data user. Results cached for 5 minutes.
@@ -106,7 +106,9 @@ def load_data_user_transactions(account_hash: str, data_user_id: str) -> pd.Data
             df = df.rename(columns={'Concept': 'Concepto'})
 
         if 'Amount' in df.columns:
-            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+            # Explicitly convert to float and then numeric to handle any weirdness
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').astype(float)
+        
         if 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
 
@@ -195,7 +197,7 @@ def add_transactions(account_hash: str, data_user_id: str, new_df: pd.DataFrame)
     return {'added': len(new_rows), 'duplicates': duplicates}
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_all_data_users_transactions(account_hash: str, data_users: tuple) -> Dict[str, pd.DataFrame]:
     """
     Load transactions for all data users of an account (for joint view).
@@ -218,7 +220,7 @@ def load_all_data_users_transactions(account_hash: str, data_users: tuple) -> Di
     return result
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def load_account_mappings(account_hash: str) -> dict:
     """
     Load learned category mappings for an account from Google Sheets.
